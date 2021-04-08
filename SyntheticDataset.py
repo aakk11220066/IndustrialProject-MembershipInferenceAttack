@@ -1,5 +1,5 @@
 import torch
-from Configuration import BATCH_SIZE, NUM_CLASS_FEATURES, NUM_CLASSES, STD_RANGE, TRAIN_TEST_RATIO
+from Configuration import BATCH_SIZE, NUM_CLASS_FEATURES, NUM_CLASSES, FEATURE_STD_RANGE, TRAIN_TEST_RATIO
 
 
 def shuffle_rows(x):
@@ -12,7 +12,7 @@ def synthetic_dataset():
     split into (train_features, train_labels), (test_features, test_labels)
     """
     # generate data features.  Shape: (BATCH_SIZE // NUM_CLASSES, NUM_CLASSES, NUM_CLASS_FEATURES)
-    feature_std_matrix = torch.diag(torch.distributions.Uniform(*STD_RANGE).sample((NUM_CLASS_FEATURES,)))
+    feature_std_matrix = torch.diag(torch.distributions.Uniform(*FEATURE_STD_RANGE).sample((NUM_CLASS_FEATURES,)))
     class_means = torch.rand(NUM_CLASSES).unsqueeze(dim=0).unsqueeze(dim=2)
     class_features = torch.matmul(
         feature_std_matrix,
