@@ -1,5 +1,5 @@
 import torch
-from Configuration import BATCH_SIZE, NUM_CLASS_FEATURES, NUM_CLASSES, FEATURE_STD_RANGE, TRAIN_TEST_RATIO
+from Configuration import BATCH_SIZE, NUM_CLASS_FEATURES, NUM_CLASSES, FEATURE_STD_RANGE, TRAIN_DATA_SIZE
 
 
 def _shuffle_rows(x):
@@ -28,7 +28,7 @@ def synthetic_dataset():
     dataset_features, dataset_labels = dataset[:, :-1], dataset[:, -1].long()
 
     # split data into train/test
-    train_data_size = int(dataset.shape[0] * TRAIN_TEST_RATIO)
+    train_data_size = TRAIN_DATA_SIZE
     test_data_size = dataset.shape[0] - train_data_size
     return dataset_features[:train_data_size], dataset_labels[:train_data_size], \
            dataset_features[-test_data_size:], dataset_labels[-test_data_size:]
