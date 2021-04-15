@@ -11,7 +11,7 @@ TARGET_PROXY_RATIO = 1 / 2
 TARGET_TRAIN_DATA_SIZE = int(TRAIN_DATA_SIZE * TARGET_PROXY_RATIO)
 FEATURE_STD_RANGE = (0.5, 1.5)
 NUM_EPOCHS = 1000
-SEED = 3
+SEEDS = [3,4,5,6,7]
 
 def get_trainer(model: nn.Module):
     # FIXME: should it be weight_decay of 1e-4 or lr_decay?
