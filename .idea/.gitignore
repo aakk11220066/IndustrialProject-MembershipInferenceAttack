@@ -1,0 +1,8 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+# Datasource local storage ignored files
+/../../../../../../../../../../:\Users\Toshiba\Desktop\Shlomi_Levi\Technion\winter2020-1\Mechine_Learning\IndustrialProject-MembershipInferenceAttack\.idea/dataSources/
+/dataSources.local.xml
+# Editor-based HTTP Client requests
+/httpRequests/
