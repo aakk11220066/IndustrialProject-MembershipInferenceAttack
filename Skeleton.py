@@ -1,4 +1,5 @@
 import torch
+from sklearn.metrics import classification_report
 from statistics import mean
 from Models import LinearModel
 from Configuration import SEEDS, NUM_EPOCHS, get_trainer, TARGET_TRAIN_DATA_SIZE
@@ -39,12 +40,25 @@ def experiment(seed: int):
           f"true/false negatives accuracy: {correct_outtrainset_predictions / test_features.shape[0]}, "
           f"total accuracy: {accuracy}"
           )
+    y_true = [False] * 160 + [True]*160
+    y_pred = list(attack_model(x=test_features, y=test_labels)) + list(attack_model(
+            x=target_train_features[:test_features.shape[0]],
+            y=target_train_labels[:test_features.shape[0]]))
+    #result = classification_report(y_true, y_pred, labels=None, target_names=None, sample_weight=None, digits=2, output_dict=False, zero_division='warn')
+    # print(result)
 
-    return accuracy
+    return y_true, y_pred
+
 
 
 def main():
-    print(f"Mean accuracy: {mean([experiment(seed) for seed in SEEDS])}")
+
+    my_list = ([experiment(seed) for seed in SEEDS])
+    y_true,y_pred = [],[]
+    for elem in my_list:
+        y_true+=elem[0]
+        y_pred+=elem[1]
+    print(f"Classification report: \n {classification_report(y_true, y_pred, labels=None, target_names=None, sample_weight=None, digits=2, output_dict=False, zero_division='warn')}")
 
 
 if __name__ == "__main__":

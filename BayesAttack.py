@@ -8,9 +8,10 @@ class BayesAttackModel(LinearModel):
     """
     Mathematical attack on linear target model under assumption of Gaussian distribution
     """
+
     def __init__(self,
                  target_model: LinearModel,
-                 proxy_train_features: torch.Tensor, proxy_train_labels: torch.Tensor,):
+                 proxy_train_features: torch.Tensor, proxy_train_labels: torch.Tensor, ):
         super().__init__(activation=nn.Sigmoid())
         proxy_model = LinearModel()
         get_trainer(proxy_model).fit(proxy_train_features, proxy_train_labels, num_epochs=NUM_EPOCHS)
