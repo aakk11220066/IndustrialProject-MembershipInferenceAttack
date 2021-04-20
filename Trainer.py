@@ -1,6 +1,9 @@
 import torch.nn as nn
 import torch
+from torch import Tensor
 from tqdm import tqdm
+from Models import LinearModel
+from Configuration import get_linear_trainer, NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE
 
 
 class ModelTrainer:
@@ -23,7 +26,53 @@ class ModelTrainer:
         return num_correct / test_labels.shape[0]
 
     def fit(self, train_features: torch.Tensor, train_labels: torch.Tensor, num_epochs: int):
-        print("Beginning training.")
+        print("Beginning training linear model.")
         for _ in tqdm(range(num_epochs)):
             self.train_batch(train_features, train_labels)
         print(f"Done.  Training accuracy: {self.accuracy(train_features, train_labels)}")
+
+
+def trained_linear_model(features: Tensor, class_labels: Tensor):
+    model = LinearModel()
+    get_linear_trainer(model).fit(features, class_labels, num_epochs=NUM_EPOCHS)
+    return model
+
+
+def split_dataset(dataset): # FIXME: should shuffle dataset
+    return dataset[:SHADOW_TRAIN_DATA_SIZE], dataset[SHADOW_TRAIN_DATA_SIZE:]
+
+
+class ConvModelTrainer:
+    def __init__(self, model: nn.Module, loss_fn: nn.Module, optimizer: torch.optim.Optimizer):
+        self.model = model
+        self.loss_fn = loss_fn
+        self.optimizer = optimizer
+
+    def train_batch(self, train_features, train_labels):
+        """
+        A convolution model makes a model.  When training it we therefore have to generate a model and then apply it on
+        the train_features to attempt to make us learn to construct the optimal model in the convolutional stage
+        """
+        # split dataset
+        shadow_features, proxy_features = split_dataset(train_features[:, :-1])
+        shadow_labels, proxy_labels = split_dataset(train_features[:, -1])
+
+        # construct models
+        shadow_model = trained_linear_model(features=shadow_features, class_labels=shadow_labels)
+        proxy_model = trained_linear_model(features=proxy_features, class_labels=proxy_labels)
+
+        self.model(shadow_model, proxy_model)(train_features).round()
+        # FIXME: train against labels
+        # FIXME: this training should be on entire dataset of N pairs of models, not on each pair alone
+
+    def fit(self, train_features: torch.Tensor, train_labels: torch.Tensor, num_dataset_splits: int):
+        """
+        num_dataset_splits is N from paper
+        """
+        split_seeds = torch.arange(num_dataset_splits)
+
+        print("Beginning training conv displacement model.")
+        for i in tqdm(range(num_dataset_splits)):
+            torch.random.manual_seed(split_seeds[i])
+            self.train_batch(train_features, train_labels)
+        print(f"Done.")

@@ -8,10 +8,10 @@ def _shuffle_rows(x):
 
 def synthetic_dataset():
     """
-    returns random dataset of training shape (batch_size, #features) and label shape (batch_size,)
+    returns random dataset of training shape (batch_size, #x) and label shape (batch_size,)
     split into (train_features, train_labels), (test_features, test_labels)
     """
-    # generate data features.  Shape: (BATCH_SIZE // NUM_CLASSES, NUM_CLASSES, NUM_CLASS_FEATURES)
+    # generate data x.  Shape: (BATCH_SIZE // NUM_CLASSES, NUM_CLASSES, NUM_CLASS_FEATURES)
     feature_std_matrix = torch.diag(torch.distributions.Uniform(*FEATURE_STD_RANGE).sample((NUM_CLASS_FEATURES,)))
     class_means = torch.rand(NUM_CLASSES).unsqueeze(dim=0).unsqueeze(dim=2)
     class_features = torch.matmul(

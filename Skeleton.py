@@ -2,7 +2,7 @@ import torch
 from sklearn.metrics import classification_report
 from statistics import mean
 from Models import LinearModel
-from Configuration import SEEDS, NUM_EPOCHS, get_trainer, TARGET_TRAIN_DATA_SIZE
+from Configuration import SEEDS, NUM_EPOCHS, get_linear_trainer, TARGET_TRAIN_DATA_SIZE
 from SyntheticDataset import synthetic_dataset
 from BayesAttack import BayesAttackModel
 
@@ -18,7 +18,7 @@ def experiment(seed: int):
     target_train_labels, proxy_train_labels = split_dataset(train_labels)
 
     target_model = LinearModel()
-    trainer = get_trainer(model=target_model)
+    trainer = get_linear_trainer(model=target_model)
     trainer.fit(target_train_features, target_train_labels, num_epochs=NUM_EPOCHS)
 
     attack_model = BayesAttackModel(
