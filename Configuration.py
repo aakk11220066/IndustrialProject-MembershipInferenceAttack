@@ -21,8 +21,7 @@ def get_linear_trainer(model: nn.Module):
     loss = nn.CrossEntropyLoss()
     return ModelTrainer(model=model, loss_fn=loss, optimizer=optimizer)
 
-def get_conv_trainer(model: nn.Module, shadow_model: nn.Module, proxy_model: nn.Module):
+def get_conv_trainer(model: nn.Module):
     optimizer = torch.optim.SGD(params=model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.01, nesterov=True)
     loss = nn.L1Loss
-    return ConvModelTrainer(model=model, loss_fn=loss, optimizer=optimizer,
-                            shadow_model=shadow_model, proxy_model=proxy_model)
+    return ConvModelTrainer(model=model, loss_fn=loss, optimizer=optimizer)
