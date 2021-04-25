@@ -1,17 +1,17 @@
 import torch
 from sklearn.metrics import classification_report
-from statistics import mean
 from Models import LinearModel
 from Configuration import SEEDS, NUM_EPOCHS, TARGET_TRAIN_DATA_SIZE
 from SyntheticDataset import synthetic_dataset
-from BayesAttack import BayesAttackModel
+#from BayesAttack import BayesAttackModel
+from GeneralAttack import GeneralAttackModel
 from Trainer import get_linear_trainer
 
 def split_dataset(dataset):
     return dataset[:TARGET_TRAIN_DATA_SIZE], dataset[TARGET_TRAIN_DATA_SIZE:]
 
 
-def experiment(seed: int):
+def experiment(seed: int, attack_model_class):
     torch.random.manual_seed(seed)
     train_features, train_labels, test_features, test_labels = synthetic_dataset()
     target_train_features, proxy_train_features = split_dataset(train_features)
@@ -21,10 +21,10 @@ def experiment(seed: int):
     trainer = get_linear_trainer(model=target_model)
     trainer.fit(target_train_features, target_train_labels, num_epochs=NUM_EPOCHS)
 
-    attack_model = BayesAttackModel(
+    attack_model = attack_model_class(
         target_model=target_model,
-        proxy_train_features=proxy_train_features,
-        proxy_train_labels=proxy_train_labels
+        attack_train_features=proxy_train_features,
+        attack_train_labels=proxy_train_labels
     )
 
     correct_intrainset_predictions = (
@@ -40,7 +40,7 @@ def experiment(seed: int):
           f"true/false negatives accuracy: {correct_outtrainset_predictions / test_features.shape[0]}, "
           f"total accuracy: {accuracy}"
           )
-    y_true = [False] * 160 + [True]*160
+    y_true = [False] * test_features.shape[0] + [True] * test_features.shape[0]
     y_pred = list(attack_model(x=test_features, y=test_labels)) + list(attack_model(
             x=target_train_features[:test_features.shape[0]],
             y=target_train_labels[:test_features.shape[0]]))
@@ -53,7 +53,7 @@ def experiment(seed: int):
 
 def main():
 
-    my_list = ([experiment(seed) for seed in SEEDS])
+    my_list = ([experiment(seed, GeneralAttackModel) for seed in SEEDS])
     y_true,y_pred = [],[]
     for elem in my_list:
         y_true+=elem[0]

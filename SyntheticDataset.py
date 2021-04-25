@@ -9,7 +9,7 @@ def _shuffle_rows(x):
 def synthetic_dataset():
     """
     returns random dataset of training shape (batch_size, #x) and label shape (batch_size,)
-    split into (train_features, train_labels), (test_features, test_labels)
+    split into (attack_train_features, attack_train_labels), (test_features, test_labels)
     """
     # generate data x.  Shape: (BATCH_SIZE // NUM_CLASSES, NUM_CLASSES, NUM_CLASS_FEATURES)
     feature_std_matrix = torch.diag(torch.distributions.Uniform(*FEATURE_STD_RANGE).sample((NUM_CLASS_FEATURES,)))

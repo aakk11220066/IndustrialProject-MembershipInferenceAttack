@@ -3,7 +3,7 @@ import torch
 from torch import Tensor
 from tqdm import tqdm
 from Models import LinearModel
-from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE
+from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE, NUM_SHADOW_MODELS
 from SyntheticDataset import _shuffle_rows
 
 
@@ -64,7 +64,7 @@ class ConvModelTrainer:
     def training_minibatch(self, train_features, train_labels, seed=0):
         """
         A convolution model makes a model.  When training it we therefore have to generate a model and then apply it on
-        the train_features to attempt to make us learn to construct the optimal model in the convolutional stage
+        the attack_train_features to attempt to make us learn to construct the optimal model in the convolutional stage
         """
         torch.random.manual_seed(seed)
 
@@ -114,12 +114,13 @@ class ConvModelTrainer:
             self.loss_fn(membership_prediction, membership_label).backward()
             self.optimizer.step()
 
-    def fit(self, train_features: torch.Tensor, train_labels: torch.Tensor, num_dataset_splits: int):
+    def fit(self, train_features: torch.Tensor, train_labels: torch.Tensor,
+            num_epochs=NUM_EPOCHS, num_shadow_models=NUM_SHADOW_MODELS):
         """
-        num_dataset_splits is N from paper
+        num_shadow_models is N from paper
         """
         print("Beginning training conv displacement model.")
-        training_dl = self.get_train_batch(train_features, train_labels, num_dataset_splits)
-        for _ in tqdm(range(NUM_EPOCHS)):
+        training_dl = self.get_training_batch(train_features, train_labels, num_shadow_models)
+        for _ in tqdm(range(num_epochs)):
             self.train_epoch(training_dl)
         print(f"Done.")

@@ -11,10 +11,13 @@ class BayesAttackModel(LinearModel):
 
     def __init__(self,
                  target_model: LinearModel,
-                 proxy_train_features: torch.Tensor, proxy_train_labels: torch.Tensor):
+                 attack_train_features: torch.Tensor, attack_train_labels: torch.Tensor):
         super().__init__(activation=nn.Sigmoid())
+        self.attack_train_features = attack_train_features
+        self.attack_train_labels = attack_train_labels
+
         proxy_model = LinearModel()
-        get_linear_trainer(proxy_model).fit(proxy_train_features, proxy_train_labels, num_epochs=NUM_EPOCHS)
+        get_linear_trainer(proxy_model).fit(attack_train_features, attack_train_labels, num_epochs=NUM_EPOCHS)
 
         attack_weights, attack_bias = self.get_attack_params(target_model=target_model, proxy_model=proxy_model)
 

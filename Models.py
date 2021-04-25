@@ -19,7 +19,7 @@ class LinearModel(nn.Module):
 class DisplacementNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv = nn.Conv2D(in_channels=2, out_channels=1, kernel_size=1)
+        self.conv = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=1)
 
     def forward(self, shadow_model: nn.Module, proxy_model: nn.Module):
         shadow_weight = shadow_model.layers[0].weight
