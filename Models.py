@@ -34,3 +34,6 @@ class DisplacementNet(nn.Module):
         prediction_maker.layers[0].weight = attack_weight
         prediction_maker.layers[0].bias = attack_bias
         return prediction_maker
+
+
+

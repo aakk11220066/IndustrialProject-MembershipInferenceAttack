@@ -2,10 +2,10 @@ import torch
 from sklearn.metrics import classification_report
 from statistics import mean
 from Models import LinearModel
-from Configuration import SEEDS, NUM_EPOCHS, get_linear_trainer, TARGET_TRAIN_DATA_SIZE
+from Configuration import SEEDS, NUM_EPOCHS, TARGET_TRAIN_DATA_SIZE
 from SyntheticDataset import synthetic_dataset
 from BayesAttack import BayesAttackModel
-
+from Trainer import get_linear_trainer
 
 def split_dataset(dataset):
     return dataset[:TARGET_TRAIN_DATA_SIZE], dataset[TARGET_TRAIN_DATA_SIZE:]

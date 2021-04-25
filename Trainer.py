@@ -3,9 +3,20 @@ import torch
 from torch import Tensor
 from tqdm import tqdm
 from Models import LinearModel
-from Configuration import get_linear_trainer, NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE
+from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE
 from SyntheticDataset import _shuffle_rows
 
+
+def get_linear_trainer(model: nn.Module):
+    # FIXME: use paper's momentum instead of mine
+    optimizer = torch.optim.SGD(params=model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.01, nesterov=True)
+    loss = nn.CrossEntropyLoss()
+    return ModelTrainer(model=model, loss_fn=loss, optimizer=optimizer)
+
+def get_conv_trainer(model: nn.Module):
+    optimizer = torch.optim.SGD(params=model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.01, nesterov=True)
+    loss = nn.L1Loss
+    return ConvModelTrainer(model=model, loss_fn=loss, optimizer=optimizer)
 
 class ModelTrainer:
     def __init__(self, model: nn.Module, loss_fn: nn.Module, optimizer: torch.optim.Optimizer):

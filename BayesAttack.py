@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 from Models import LinearModel
-from Configuration import NUM_EPOCHS, get_linear_trainer
-
+from Configuration import NUM_EPOCHS
+from Trainer import get_linear_trainer
 
 class BayesAttackModel(LinearModel):
     """
