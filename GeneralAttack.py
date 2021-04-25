@@ -18,4 +18,10 @@ class GeneralAttackModel(BayesAttackModel):
         self.weights_displacer = DisplacementNet()
         get_conv_trainer(model=self.weights_displacer).fit(self.attack_train_features, self.attack_train_labels,
                                                            num_epochs=NUM_EPOCHS)
-        return self.weights_displacer(shadow_model=target_model, proxy_model=proxy_model)
+        attack_model = self.weights_displacer(
+            shadow_weights=target_model.layers[0].weight,
+            proxy_weights=proxy_model.layers[0].weight,
+            shadow_biases=target_model.layers[0].bias,
+            proxy_biases=proxy_model.layers[0].bias
+        )
+        return attack_model.layers[0].weight, attack_model.layers[0].bias

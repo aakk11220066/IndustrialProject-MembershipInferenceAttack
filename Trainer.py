@@ -3,7 +3,7 @@ import torch
 from torch import Tensor
 from tqdm import tqdm
 from Models import LinearModel
-from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE, NUM_SHADOW_MODELS
+from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE, NUM_SHADOW_MODELS, MINIBATCH_SIZE
 from SyntheticDataset import _shuffle_rows
 
 
@@ -15,7 +15,7 @@ def get_linear_trainer(model: nn.Module):
 
 def get_conv_trainer(model: nn.Module):
     optimizer = torch.optim.SGD(params=model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.01, nesterov=True)
-    loss = nn.L1Loss
+    loss = nn.L1Loss()
     return ConvModelTrainer(model=model, loss_fn=loss, optimizer=optimizer)
 
 class ModelTrainer:
@@ -79,40 +79,65 @@ class ConvModelTrainer:
         membership_labels = torch.cat([
             torch.ones(shadow_features.shape[0]),
             torch.zeros(proxy_features.shape[0])
-        ], dim=1)
+        ], dim=0)
 
         weights = torch.stack([shadow_model.layers[0].weight, proxy_model.layers[0].weight], dim=2)
-        biases = torch.stack([shadow_model.layers[0].bias, proxy_model.layers[0].bias], dim=2)
-        return weights, biases, torch.cat([shadow_features, proxy_features], dim=0), membership_labels
+        biases = torch.stack([shadow_model.layers[0].bias, proxy_model.layers[0].bias], dim=1)
+        return weights, biases, torch.cat([shadow_features, proxy_features], dim=0), train_labels, membership_labels
 
 
     def get_training_batch(self, train_features, train_labels, num_dataset_splits):
         print("Creating training batch")
         split_seeds = torch.arange(num_dataset_splits)
 
-        weights, biases, x, membership_labels =\
+        weights, biases, x, y, membership_labels = \
             zip(*(self.training_minibatch(train_features, train_labels, seed=split_seeds[i]) for i in range(num_dataset_splits)))
-        weights = weights.expand(x.shape[0], *weights.shape)
-        biases = biases.expand(x.shape[0], *biases.shape)
+        weights, biases, x, y, membership_labels = \
+            map(lambda data_tuple: torch.stack(data_tuple, dim=0), (weights, biases, x, y, membership_labels))
+        weights = weights.unsqueeze(dim=1).expand(weights.shape[0], x.shape[1], *weights.shape[1:])
+        biases = biases.unsqueeze(dim=1).expand(biases.shape[0], x.shape[1], *biases.shape[1:])
+        '''
+        Definitions: 
+        matrix_pair = (NUM_CLASSES, NUM_CLASS_FEATURES, |{proxy_dataset, shadow_dataset}|)
+        bias_pair = (NUM_CLASSES, |{proxy_dataset, shadow_dataset}|)
+
+        weights.shape == (NUM_SHADOW_MODELS, ATTACK_TRAIN_DATA_SIZE, matrix_pair)
+        biases.shape == (NUM_SHADOW_MODELS, ATTACK_TRAIN_DATA_SIZE, bias_pair)
+        x.shape == (NUM_SHADOW_MODELS, ATTACK_TRAIN_DATA_SIZE, NUM_CLASS_FEATURES)
+        y.shape == (NUM_SHADOW_MODELS, ATTACK_TRAIN_DATA_SIZE)
+        membership_labels.shape == (NUM_SHADOW_MODELS, ATTACK_TRAIN_DATA_SIZE)
+        '''
+        weights, biases, x, y, membership_labels = \
+            map(lambda tensor: tensor.flatten(end_dim=1), (weights, biases, x, y, membership_labels))
         return torch.utils.data.DataLoader(
-            torch.utils.data.TensorsDataset(weights, biases, x, membership_labels),
-            shuffle=True
+            torch.utils.data.TensorDataset(weights, biases, x, y, membership_labels),
+            shuffle=True,
+            batch_size = MINIBATCH_SIZE
         )
 
     def train_epoch(self, training_dl: torch.utils.data.DataLoader):
-        for membership_example in training_dl:
-            weights, biases, train_features, membership_label = membership_example
-            shadow_model = LinearModel()
-            shadow_model.layers[0].weights = weights[0, :, :]
-            shadow_model.layers[0].bias = biases[0, :]
-            proxy_model = LinearModel()
-            proxy_model.layers[0].weights = weights[1, :, :]
-            proxy_model.layers[0].bias = biases[1, :]
+        for progress_count, membership_example in enumerate(training_dl):
+            weights, biases, train_features, train_labels, membership_labels = membership_example
 
-            membership_prediction = self.model(shadow_model, proxy_model)(train_features).round()
+            shadow_weights = weights[:, :, :, 1]
+            shadow_biases = biases[:, :, 1]
+            proxy_weights = weights[:, :, :, 0]
+            proxy_biases = biases[:, :, 0]
+
+            datapoint_sorters = self.model(shadow_weights, proxy_weights, shadow_biases, proxy_biases)
+
+            membership_predictions = [
+                datapoint_sorter(train_features[i])
+                    .gather(dim=0, index=train_labels[i].unsqueeze(dim=0)).round().squeeze()
+                for i, datapoint_sorter in enumerate(datapoint_sorters)
+            ]
+
             self.optimizer.zero_grad()
-            self.loss_fn(membership_prediction, membership_label).backward()
+            self.loss_fn(torch.stack(membership_predictions), membership_labels).backward()
             self.optimizer.step()
+
+            if progress_count % 50 == 0:
+                print(f"Finished training DisplacementNet on datapoint {progress_count}/{len(training_dl)}")
 
     def fit(self, train_features: torch.Tensor, train_labels: torch.Tensor,
             num_epochs=NUM_EPOCHS, num_shadow_models=NUM_SHADOW_MODELS):

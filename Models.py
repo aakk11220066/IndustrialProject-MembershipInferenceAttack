@@ -1,3 +1,5 @@
+from typing import List
+
 import torch.nn as nn
 import torch
 from Configuration import NUM_CLASSES, NUM_CLASS_FEATURES
@@ -21,19 +23,33 @@ class DisplacementNet(nn.Module):
         super().__init__()
         self.conv = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=1)
 
-    def forward(self, shadow_model: nn.Module, proxy_model: nn.Module):
-        shadow_weight = shadow_model.layers[0].weight
-        shadow_bias = shadow_model.layers[0].bias
-        proxy_weight = proxy_model.layers[0].weight
-        proxy_bias = proxy_model.layers[0].bias
+    def forward(self, shadow_weights, proxy_weights, shadow_biases, proxy_biases):
+        if len(shadow_weights.shape) < 3:
+            shadow_weights = shadow_weights.unsqueeze(dim=0)
+        if len(proxy_weights.shape) < 3:
+            proxy_weights = proxy_weights.unsqueeze(dim=0)
+        if len(shadow_biases.shape) < 2:
+            shadow_biases = shadow_biases.unsqueeze(dim=0)
+        if len(proxy_biases.shape) < 2:
+            proxy_biases = proxy_biases.unsqueeze(dim=0)
 
-        attack_weight = self.conv(torch.stack((shadow_weight, proxy_weight)))
-        attack_bias = self.conv(torch.stack((shadow_bias, proxy_bias))).squeeze()
+        attack_weights = self.conv(torch.stack((shadow_weights, proxy_weights), dim=1))
+        attack_biases = self.conv(torch.stack((shadow_biases, proxy_biases), dim=1).unsqueeze(dim=-1)).squeeze(dim=-1)
+        if len(attack_weights.shape) > 3:
+            attack_weights = attack_weights.squeeze(dim=1)
+        if len(attack_biases.shape) > 2:
+            attack_biases = attack_biases.squeeze(dim=1)
 
-        prediction_maker = LinearModel(num_classes=2)
-        prediction_maker.layers[0].weight = attack_weight
-        prediction_maker.layers[0].bias = attack_bias
-        return prediction_maker
+        datapoint_sorters = []
+        for i in range(attack_weights.shape[0]):
+            datapoint_sorter = LinearModel(activation=nn.Sigmoid(), num_classes=10)
+            datapoint_sorter.layers[0].weight = nn.Parameter(attack_weights[i])
+            datapoint_sorter.layers[0].bias = nn.Parameter(attack_biases[i])
+            datapoint_sorters.append(datapoint_sorter)
+        if len(datapoint_sorters)>1:
+            return datapoint_sorters
+        else:
+            return datapoint_sorters[0]
 
 
 

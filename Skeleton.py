@@ -3,7 +3,7 @@ from sklearn.metrics import classification_report
 from Models import LinearModel
 from Configuration import SEEDS, NUM_EPOCHS, TARGET_TRAIN_DATA_SIZE
 from SyntheticDataset import synthetic_dataset
-#from BayesAttack import BayesAttackModel
+from BayesAttack import BayesAttackModel
 from GeneralAttack import GeneralAttackModel
 from Trainer import get_linear_trainer
 
