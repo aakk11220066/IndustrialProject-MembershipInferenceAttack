@@ -40,16 +40,19 @@ class DisplacementNet(nn.Module):
         if len(attack_biases.shape) > 2:
             attack_biases = attack_biases.squeeze(dim=1)
 
-        datapoint_sorters = []
-        for i in range(attack_weights.shape[0]):
-            datapoint_sorter = LinearModel(activation=nn.Sigmoid(), num_classes=10)
-            datapoint_sorter.layers[0].weight = nn.Parameter(attack_weights[i])
-            datapoint_sorter.layers[0].bias = nn.Parameter(attack_biases[i])
-            datapoint_sorters.append(datapoint_sorter)
-        if len(datapoint_sorters)>1:
-            return datapoint_sorters
-        else:
-            return datapoint_sorters[0]
+        return attack_weights, attack_biases
+
+'''    datapoint_sorters = []
+    for i in range(attack_weights.shape[0]):
+        datapoint_sorter = LinearModel(activation=nn.Sigmoid(), num_classes=10)
+        datapoint_sorter.layers[0].weight = nn.Parameter(attack_weights[i])
+        datapoint_sorter.layers[0].bias = nn.Parameter(attack_biases[i])
+        datapoint_sorters.append(datapoint_sorter)
+
+    if len(datapoint_sorters) > 1:
+        return datapoint_sorters
+    else:
+        return datapoint_sorters[0]'''
 
 
 

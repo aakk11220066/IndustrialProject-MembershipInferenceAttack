@@ -124,13 +124,10 @@ class ConvModelTrainer:
             proxy_weights = weights[:, :, :, 0]
             proxy_biases = biases[:, :, 0]
 
-            datapoint_sorters = self.model(shadow_weights, proxy_weights, shadow_biases, proxy_biases)
+            attack_weights, attack_biases = self.model(shadow_weights, proxy_weights, shadow_biases, proxy_biases)
 
-            membership_predictions = [
-                datapoint_sorter(train_features[i])
-                    .gather(dim=0, index=train_labels[i].unsqueeze(dim=0)).round().squeeze()
-                for i, datapoint_sorter in enumerate(datapoint_sorters)
-            ]
+            membership_predictions = torch.sigmoid(attack_weights.bmm(train_features) + attack_biases)
+            membership_predictions = membership_predictions.gather(dim=0, index=train_labels.unsqueeze(dim=0)).round().squeeze()
 
             self.optimizer.zero_grad()
             self.loss_fn(torch.stack(membership_predictions), membership_labels).backward()

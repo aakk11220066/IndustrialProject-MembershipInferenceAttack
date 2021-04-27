@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from sklearn.metrics import classification_report
 from Models import LinearModel
 from Configuration import SEEDS, NUM_EPOCHS, TARGET_TRAIN_DATA_SIZE
@@ -11,6 +12,24 @@ def split_dataset(dataset):
     return dataset[:TARGET_TRAIN_DATA_SIZE], dataset[TARGET_TRAIN_DATA_SIZE:]
 
 
+def get_attack_model(attack_model_class, target_model, attack_train_features, attack_train_labels):
+    if attack_model_class == BayesAttackModel:
+        return attack_model_class(
+            target_model=target_model,
+            attack_train_features=attack_train_features,
+            attack_train_labels=attack_train_labels
+        )
+    if attack_model_class == GeneralAttackModel:
+        attack_weights, attack_biases = attack_model_class(
+            target_model=target_model,
+            attack_train_features=attack_train_features,
+            attack_train_labels=attack_train_labels
+        )
+        datapoint_sorter = LinearModel(activation=nn.Sigmoid(), num_classes=10)
+        datapoint_sorter.layers[0].weight = nn.Parameter(attack_weights.squeeze(dim=0))
+        datapoint_sorter.layers[0].bias = nn.Parameter(attack_biases.squeeze(dim=0))
+        return datapoint_sorter
+
 def experiment(seed: int, attack_model_class):
     torch.random.manual_seed(seed)
     train_features, train_labels, test_features, test_labels = synthetic_dataset()
@@ -21,7 +40,9 @@ def experiment(seed: int, attack_model_class):
     trainer = get_linear_trainer(model=target_model)
     trainer.fit(target_train_features, target_train_labels, num_epochs=NUM_EPOCHS)
 
-    attack_model = attack_model_class(
+
+    attack_model = get_attack_model(
+        attack_model_class=attack_model_class,
         target_model=target_model,
         attack_train_features=proxy_train_features,
         attack_train_labels=proxy_train_labels
