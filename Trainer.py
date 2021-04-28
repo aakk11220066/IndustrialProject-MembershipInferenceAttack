@@ -126,11 +126,12 @@ class ConvModelTrainer:
 
             attack_weights, attack_biases = self.model(shadow_weights, proxy_weights, shadow_biases, proxy_biases)
 
-            membership_predictions = torch.sigmoid(attack_weights.bmm(train_features) + attack_biases)
-            membership_predictions = membership_predictions.gather(dim=0, index=train_labels.unsqueeze(dim=0)).round().squeeze()
+            membership_predictions = torch.sigmoid(attack_weights.bmm(train_features.unsqueeze(dim=-1)).squeeze(dim=-1) + attack_biases)
+            membership_predictions = membership_predictions.gather(dim=1, index=train_labels.unsqueeze(dim=0)).round().squeeze()
 
             self.optimizer.zero_grad()
-            self.loss_fn(torch.stack(membership_predictions), membership_labels).backward()
+            loss = self.loss_fn(membership_predictions, membership_labels)
+            loss.backward()
             self.optimizer.step()
 
             if progress_count % 50 == 0:
