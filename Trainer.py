@@ -9,13 +9,13 @@ from SyntheticDataset import _shuffle_rows
 
 def get_linear_trainer(model: nn.Module):
     # FIXME: use paper's momentum instead of mine
-    optimizer = torch.optim.SGD(params=model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.01, nesterov=True)
+    optimizer = torch.optim.SGD(params=model.parameters(), lr=0.1, momentum=0.01, nesterov=True)
     loss = nn.CrossEntropyLoss()
     return ModelTrainer(model=model, loss_fn=loss, optimizer=optimizer)
 
 def get_conv_trainer(model: nn.Module):
-    optimizer = torch.optim.SGD(params=model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.01, nesterov=True)
-    loss = nn.L1Loss()
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=0.1)
+    loss = nn.BCELoss()
     return ConvModelTrainer(model=model, loss_fn=loss, optimizer=optimizer)
 
 class ModelTrainer:
@@ -127,7 +127,7 @@ class ConvModelTrainer:
             attack_weights, attack_biases = self.model(shadow_weights, proxy_weights, shadow_biases, proxy_biases)
 
             membership_predictions = torch.sigmoid(attack_weights.bmm(train_features.unsqueeze(dim=-1)).squeeze(dim=-1) + attack_biases)
-            membership_predictions = membership_predictions.gather(dim=1, index=train_labels.unsqueeze(dim=0)).round().squeeze()
+            membership_predictions = membership_predictions.gather(dim=1, index=train_labels.unsqueeze(dim=0)).squeeze()
 
             self.optimizer.zero_grad()
             loss = self.loss_fn(membership_predictions, membership_labels)
