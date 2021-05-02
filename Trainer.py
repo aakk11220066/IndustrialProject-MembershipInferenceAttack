@@ -81,8 +81,9 @@ class ConvModelTrainer:
             torch.zeros(proxy_features.shape[0])
         ], dim=0)
 
-        weights = torch.stack([shadow_model.layers[0].weight, proxy_model.layers[0].weight], dim=2)
-        biases = torch.stack([shadow_model.layers[0].bias, proxy_model.layers[0].bias], dim=1)
+        with torch.no_grad():
+            weights = torch.stack([shadow_model.layers[0].weight, proxy_model.layers[0].weight], dim=2)
+            biases = torch.stack([shadow_model.layers[0].bias, proxy_model.layers[0].bias], dim=1)
         return weights, biases, torch.cat([shadow_features, proxy_features], dim=0), train_labels, membership_labels
 
 
