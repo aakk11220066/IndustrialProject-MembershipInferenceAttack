@@ -13,22 +13,12 @@ def split_dataset(dataset):
 
 
 def get_attack_model(attack_model_class, target_model, attack_train_features, attack_train_labels):
-    if attack_model_class == BayesAttackModel:
-        return attack_model_class(
-            target_model=target_model,
-            attack_train_features=attack_train_features,
-            attack_train_labels=attack_train_labels
-        )
-    if attack_model_class == GeneralAttackModel:
-        attack_weights, attack_biases = attack_model_class(
-            target_model=target_model,
-            attack_train_features=attack_train_features,
-            attack_train_labels=attack_train_labels
-        )
-        datapoint_sorter = LinearModel(activation=nn.Sigmoid(), num_classes=10)
-        datapoint_sorter.layers[0].weight = nn.Parameter(attack_weights.squeeze(dim=0))
-        datapoint_sorter.layers[0].bias = nn.Parameter(attack_biases.squeeze(dim=0))
-        return datapoint_sorter
+    return attack_model_class(
+        target_model=target_model,
+        attack_train_features=attack_train_features,
+        attack_train_labels=attack_train_labels
+    )
+
 
 def experiment(seed: int, attack_model_class):
     torch.random.manual_seed(seed)
@@ -74,12 +64,12 @@ def experiment(seed: int, attack_model_class):
 
 def main():
 
-    my_list = ([experiment(seed, GeneralAttackModel) for seed in SEEDS])
-    y_true,y_pred = [],[]
-    for elem in my_list:
-        y_true+=elem[0]
-        y_pred+=elem[1]
-    print(f"Classification report: \n {classification_report(y_true, y_pred, labels=None, target_names=None, sample_weight=None, digits=2, output_dict=False, zero_division='warn')}")
+    experiment_results = ([experiment(seed, GeneralAttackModel) for seed in SEEDS])
+    true_class,predicted_class = [],[]
+    for experiment_result in experiment_results:
+        true_class+=experiment_result[0]
+        predicted_class+=experiment_result[1]
+    print(f"Classification report: \n {classification_report(true_class, predicted_class, labels=None, target_names=None, sample_weight=None, digits=2, output_dict=False, zero_division='warn')}")
 
 
 if __name__ == "__main__":
