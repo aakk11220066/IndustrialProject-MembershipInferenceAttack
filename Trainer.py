@@ -10,27 +10,29 @@ from SyntheticDataset import _shuffle_rows
 def get_linear_trainer(model: nn.Module):
     # FIXME: use paper's momentum instead of mine
     optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01,betas=(0.9, 0.999), eps=1e-08,amsgrad=False)
-
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=DECAY_RATE)
     loss = nn.CrossEntropyLoss()
-    return ModelTrainer(model=model, loss_fn=loss, optimizer=optimizer)
+    return ModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler)
 
 
 def get_conv_trainer(model: nn.Module):
     optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01,betas=(0.9, 0.999), eps=1e-08, amsgrad=False)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=DECAY_RATE)
     loss = nn.BCELoss()
-    return ConvModelTrainer(model=model, loss_fn=loss, optimizer=optimizer)
+    return ConvModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler)
 
 class ModelTrainer:
-    def __init__(self, model: nn.Module, loss_fn: nn.Module, optimizer: torch.optim.Optimizer):
+    def __init__(self, model: nn.Module, loss_fn: nn.Module, optimization_scheduler: torch.optim.Optimizer):
         self.model = model
         self.loss_fn = loss_fn
-        self.optimizer = optimizer
+        self.scheduler = optimization_scheduler
 
     def train_batch(self, train_features: torch.Tensor, train_labels: torch.Tensor):
         confidence_levels = self.model(train_features)  # (BATCH_SIZE, NUM_FEATURES) -> (BATCH_SIZE, NUM_CLASSES)
-        self.optimizer.zero_grad()
+        self.scheduler.optimizer.zero_grad()
         self.loss_fn(confidence_levels, train_labels).backward()
-        self.optimizer.step()
+        self.scheduler.optimizer.step()
+        self.scheduler.step()
 
     def accuracy(self, test_features: torch.Tensor, test_labels: torch.Tensor):
         confidence_levels = self.model(test_features)  # (BATCH_SIZE, NUM_FEATURES) -> (BATCH_SIZE, NUM_CLASSES)
@@ -58,10 +60,10 @@ def split_dataset(dataset):
 
 
 class ConvModelTrainer:
-    def __init__(self, model: nn.Module, loss_fn: nn.Module, optimizer: torch.optim.Optimizer):
+    def __init__(self, model: nn.Module, loss_fn: nn.Module, optimization_scheduler: torch.optim.Optimizer):
         self.model = model
         self.loss_fn = loss_fn
-        self.optimizer = optimizer
+        self.scheduler = optimization_scheduler
 
     def training_minibatch(self, train_features, train_labels, seed=0):
         """
@@ -133,15 +135,14 @@ class ConvModelTrainer:
             membership_predictions = torch.sigmoid(attack_weights.bmm(train_features.unsqueeze(dim=-1)).squeeze(dim=-1) + attack_biases)
             membership_predictions = membership_predictions.gather(dim=1, index=train_labels.unsqueeze(dim=0)).round().squeeze()
 
-            self.optimizer.zero_grad()
-            my_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=self.optimizer, gamma=DECAY_RATE)
-
+            self.scheduler.optimizer.zero_grad()
             loss = self.loss_fn(membership_predictions, membership_labels)
             loss.backward()
-            my_lr_scheduler.step()
+            self.scheduler.optimizer.step()
+            self.scheduler.step()
 
-            if progress_count % 50 == 0:
-                print(f"Finished training DisplacementNet on datapoint {progress_count}/{len(training_dl)}")
+            #if progress_count % 50 == 0:
+            #    print(f"Finished training DisplacementNet on datapoint {progress_count}/{len(training_dl)}")
 
     def fit(self, train_features: torch.Tensor, train_labels: torch.Tensor,
             num_epochs=NUM_EPOCHS, num_shadow_models=NUM_SHADOW_MODELS):
