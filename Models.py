@@ -4,6 +4,15 @@ import torch.nn as nn
 import torch
 from Configuration import NUM_CLASSES, NUM_CLASS_FEATURES
 
+from torch.nn import functional as F
+
+params = [
+    torch.Tensor(32, 1).uniform_(-1., 1.).requires_grad_(),
+    torch.Tensor(32).zero_().requires_grad_()
+]
+
+
+
 
 class LinearModel(nn.Module):
     def __init__(self, activation=nn.Softmax(dim=1), num_class_features=NUM_CLASS_FEATURES, num_classes=NUM_CLASSES):
@@ -22,6 +31,7 @@ class DisplacementNet(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=1)
+        #self.b_conv = nn.Conv1d(in_channels=2, out_channels=1, kernel_size=1)
 
     def forward(self, shadow_weights, proxy_weights, shadow_biases, proxy_biases):
         if len(shadow_weights.shape) < 3:

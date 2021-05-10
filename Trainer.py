@@ -3,18 +3,20 @@ import torch
 from torch import Tensor
 from tqdm import tqdm
 from Models import LinearModel
-from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE, NUM_SHADOW_MODELS, MINIBATCH_SIZE, VERBOSE_LINEAR_TRAINING, VERBOSE_CONVOLUTION_TRAINING
+from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE, NUM_SHADOW_MODELS, MINIBATCH_SIZE, DECAY_RATE
 from SyntheticDataset import _shuffle_rows
 
 
 def get_linear_trainer(model: nn.Module):
     # FIXME: use paper's momentum instead of mine
-    optimizer = torch.optim.SGD(params=model.parameters(), lr=0.1, momentum=0.01, nesterov=True)
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01,betas=(0.9, 0.999), eps=1e-08,amsgrad=False)
+
     loss = nn.CrossEntropyLoss()
     return ModelTrainer(model=model, loss_fn=loss, optimizer=optimizer)
 
+
 def get_conv_trainer(model: nn.Module):
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=0.1)
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01,betas=(0.9, 0.999), eps=1e-08, amsgrad=False)
     loss = nn.BCELoss()
     return ConvModelTrainer(model=model, loss_fn=loss, optimizer=optimizer)
 
@@ -38,12 +40,10 @@ class ModelTrainer:
         return num_correct / test_labels.shape[0]
 
     def fit(self, train_features: torch.Tensor, train_labels: torch.Tensor, num_epochs: int):
-        if VERBOSE_LINEAR_TRAINING:
-            print("Beginning training linear model.")
-        for _ in tqdm(range(num_epochs), disable=not VERBOSE_LINEAR_TRAINING):
+        print("Beginning training linear model.")
+        for _ in tqdm(range(num_epochs)):
             self.train_batch(train_features, train_labels)
-        if VERBOSE_LINEAR_TRAINING:
-            print(f"Done.  Training accuracy: {self.accuracy(train_features, train_labels)}")
+        print(f"Done.  Training accuracy: {self.accuracy(train_features, train_labels)}")
 
 
 def trained_linear_model(features: Tensor, class_labels: Tensor):
@@ -82,22 +82,20 @@ class ConvModelTrainer:
             torch.ones(shadow_features.shape[0]),
             torch.zeros(proxy_features.shape[0])
         ], dim=0)
-
         with torch.no_grad():
             weights = torch.stack([shadow_model.layers[0].weight, proxy_model.layers[0].weight], dim=2)
             biases = torch.stack([shadow_model.layers[0].bias, proxy_model.layers[0].bias], dim=1)
+
         return weights, biases, torch.cat([shadow_features, proxy_features], dim=0), train_labels, membership_labels
 
 
+
     def get_training_batch(self, train_features, train_labels, num_dataset_splits):
-        if VERBOSE_CONVOLUTION_TRAINING:
-            print("Creating convolutional network training batch.")
+        print("Creating training batch")
         split_seeds = torch.arange(num_dataset_splits)
 
-        weights, biases, x, y, membership_labels = zip(
-            *(self.training_minibatch(train_features, train_labels, seed=split_seeds[i])
-              for i in tqdm(range(num_dataset_splits), disable=not VERBOSE_CONVOLUTION_TRAINING))
-        )
+        weights, biases, x, y, membership_labels = \
+            zip(*(self.training_minibatch(train_features, train_labels, seed=split_seeds[i]) for i in range(num_dataset_splits)))
         weights, biases, x, y, membership_labels = \
             map(lambda data_tuple: torch.stack(data_tuple, dim=0), (weights, biases, x, y, membership_labels))
         weights = weights.unsqueeze(dim=1).expand(weights.shape[0], x.shape[1], *weights.shape[1:])
@@ -133,27 +131,27 @@ class ConvModelTrainer:
             attack_weights, attack_biases = self.model(shadow_weights, proxy_weights, shadow_biases, proxy_biases)
 
             membership_predictions = torch.sigmoid(attack_weights.bmm(train_features.unsqueeze(dim=-1)).squeeze(dim=-1) + attack_biases)
-            membership_predictions = membership_predictions.gather(dim=1, index=train_labels.unsqueeze(dim=0)).squeeze()
+            membership_predictions = membership_predictions.gather(dim=1, index=train_labels.unsqueeze(dim=0)).round().squeeze()
 
             self.optimizer.zero_grad()
+            my_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=self.optimizer, gamma=DECAY_RATE)
+
             loss = self.loss_fn(membership_predictions, membership_labels)
             loss.backward()
-            self.optimizer.step()
+            my_lr_scheduler.step()
 
-            #if progress_count % 50 == 0 and VERBOSE_CONVOLUTION_TRAINING:
-            #    print(f"Finished training DisplacementNet on datapoint {progress_count}/{len(training_dl)}")
+            if progress_count % 50 == 0:
+                print(f"Finished training DisplacementNet on datapoint {progress_count}/{len(training_dl)}")
 
     def fit(self, train_features: torch.Tensor, train_labels: torch.Tensor,
             num_epochs=NUM_EPOCHS, num_shadow_models=NUM_SHADOW_MODELS):
         """
         num_shadow_models is N from paper
         """
+        print("Beginning training conv displacement model.")
         training_dl = self.get_training_batch(train_features, train_labels, num_shadow_models)
-        if VERBOSE_CONVOLUTION_TRAINING:
-            print("Beginning training conv displacement model on training set.")
-        for _ in tqdm(range(num_epochs), disable=not VERBOSE_CONVOLUTION_TRAINING):
+        for _ in tqdm(range(num_epochs)):
             self.train_epoch(training_dl)
-        if VERBOSE_CONVOLUTION_TRAINING:
-            print(f"Done.")
+        print(f"Done.")
 
 #DELETE THIS COMMENT
