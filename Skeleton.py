@@ -49,7 +49,7 @@ def experiment(seed: int, attack_model_class):
                (2 * test_features.shape[0])
     print(f"True/false positives accuracy: {correct_intrainset_predictions / test_features.shape[0]}, "
           f"true/false negatives accuracy: {correct_outtrainset_predictions / test_features.shape[0]}, "
-          f"total accuracy: {accuracy}"
+          f"total accuracy: {accuracy}\n"
           )
     y_true = [False] * test_features.shape[0] + [True] * test_features.shape[0]
     y_pred = list(attack_model(x=test_features, y=test_labels)) + list(attack_model(
