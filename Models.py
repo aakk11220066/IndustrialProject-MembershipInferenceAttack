@@ -45,6 +45,7 @@ class DisplacementNet(nn.Module):
 
         attack_weights = self.conv(torch.stack((shadow_weights, proxy_weights), dim=1))
         attack_biases = self.conv(torch.stack((shadow_biases, proxy_biases), dim=1).unsqueeze(dim=-1)).squeeze(dim=-1)
+
         if len(attack_weights.shape) > 3:
             attack_weights = attack_weights.squeeze(dim=1)
         if len(attack_biases.shape) > 2:

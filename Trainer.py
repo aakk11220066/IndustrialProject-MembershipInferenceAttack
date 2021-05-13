@@ -137,10 +137,10 @@ class ConvModelTrainer:
         for progress_count, membership_example in enumerate(training_dl):
             weights, biases, train_features, train_labels, membership_labels = membership_example
 
-            shadow_weights = weights[:, :, :, 1]
-            shadow_biases = biases[:, :, 1]
-            proxy_weights = weights[:, :, :, 0]
-            proxy_biases = biases[:, :, 0]
+            shadow_weights = weights[:, :, :, 0]
+            shadow_biases = biases[:, :, 0]
+            proxy_weights = weights[:, :, :, 1]
+            proxy_biases = biases[:, :, 1]
 
             attack_weights, attack_biases = self.model(shadow_weights, proxy_weights, shadow_biases, proxy_biases)
 
