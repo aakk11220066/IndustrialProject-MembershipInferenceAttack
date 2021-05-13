@@ -3,7 +3,7 @@ import torch.nn as nn
 from sklearn.metrics import classification_report
 from Models import LinearModel
 from Configuration import SEEDS, NUM_EPOCHS, TARGET_TRAIN_DATA_SIZE
-from SyntheticDataset import synthetic_dataset
+from GermanDataset import german_dataset
 from BayesAttack import BayesAttackModel
 from GeneralAttack import GeneralAttackModel
 from Trainer import get_linear_trainer
@@ -22,13 +22,17 @@ def get_attack_model(attack_model_class, target_model, attack_train_features, at
 
 def experiment(seed: int, attack_model_class):
     torch.random.manual_seed(seed)
-    train_features, train_labels, test_features, test_labels = synthetic_dataset()
+    train_features, train_labels, test_features, test_labels = german_dataset(filename="German.csv")
+    train_features = nn.functional.normalize(train_features, dim=0)
+    test_features = nn.functional.normalize(test_features, dim=0)
     target_train_features, proxy_train_features = split_dataset(train_features)
     target_train_labels, proxy_train_labels = split_dataset(train_labels)
 
     target_model = LinearModel()
     trainer = get_linear_trainer(model=target_model)
     trainer.fit(target_train_features, target_train_labels, num_epochs=NUM_EPOCHS)
+
+    print(f"test acc = {trainer.accuracy(test_features=test_features, test_labels=test_labels)}")
 
 
     attack_model = get_attack_model(
@@ -52,9 +56,12 @@ def experiment(seed: int, attack_model_class):
           f"total accuracy: {accuracy}\n"
           )
     y_true = [False] * test_features.shape[0] + [True] * test_features.shape[0]
-    y_pred = list(attack_model(x=test_features, y=test_labels)) + list(attack_model(
-            x=target_train_features[:test_features.shape[0]],
-            y=target_train_labels[:test_features.shape[0]]))
+    y_pred = list(attack_model(x=test_features, y=test_labels)) + \
+             list(attack_model(
+                 x=target_train_features[:test_features.shape[0]],
+                 y=target_train_labels[:test_features.shape[0]]
+             )
+    )
     #result = classification_report(y_true, y_pred, labels=None, target_names=None, sample_weight=None, digits=2, output_dict=False, zero_division='warn')
     # print(result)
 

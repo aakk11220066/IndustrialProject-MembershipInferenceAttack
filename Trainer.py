@@ -3,7 +3,8 @@ import torch
 from torch import Tensor
 from tqdm import tqdm
 from Models import LinearModel
-from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE, NUM_SHADOW_MODELS, MINIBATCH_SIZE, DECAY_RATE
+from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE, NUM_SHADOW_MODELS, MINIBATCH_SIZE, DECAY_RATE, \
+    NUM_PATIENCE_EPOCHS, VERBOSE_LINEAR_TRAINING
 from SyntheticDataset import _shuffle_rows
 
 
@@ -42,10 +43,12 @@ class ModelTrainer:
         return num_correct / test_labels.shape[0]
 
     def fit(self, train_features: torch.Tensor, train_labels: torch.Tensor, num_epochs: int):
-        print("Beginning training linear model.")
-        for _ in tqdm(range(num_epochs)):
+        if (VERBOSE_LINEAR_TRAINING):
+            print("Beginning training linear model.")
+        for _ in tqdm(range(num_epochs), disable=not VERBOSE_LINEAR_TRAINING):
             self.train_batch(train_features, train_labels)
-        print(f"Done.  Training accuracy: {self.accuracy(train_features, train_labels)}")
+        if (VERBOSE_LINEAR_TRAINING):
+            print(f"Done.  Training accuracy: {self.accuracy(train_features, train_labels)}")
 
 
 def trained_linear_model(features: Tensor, class_labels: Tensor):
@@ -54,9 +57,13 @@ def trained_linear_model(features: Tensor, class_labels: Tensor):
     return model
 
 
-def split_dataset(dataset):
-    _shuffle_rows(dataset)
-    return dataset[:SHADOW_TRAIN_DATA_SIZE], dataset[SHADOW_TRAIN_DATA_SIZE:]
+def split_dataset(features, labels):
+    dataset = torch.cat([features, labels.unsqueeze(dim=-1)], dim=1)
+    dataset = _shuffle_rows(dataset)
+    features = dataset[:, :-1]
+    labels = dataset[:, -1]
+    return features[:SHADOW_TRAIN_DATA_SIZE], features[SHADOW_TRAIN_DATA_SIZE:], \
+           labels[:SHADOW_TRAIN_DATA_SIZE], labels[SHADOW_TRAIN_DATA_SIZE:]
 
 
 class ConvModelTrainer:
@@ -73,8 +80,8 @@ class ConvModelTrainer:
         torch.random.manual_seed(seed)
 
         # split dataset
-        shadow_features, proxy_features = split_dataset(train_features)
-        shadow_labels, proxy_labels = split_dataset(train_labels)
+        shadow_features, proxy_features, shadow_labels, proxy_labels = split_dataset(train_features, train_labels)
+        shadow_labels, proxy_labels = shadow_labels.long(), proxy_labels.long()
 
         # construct models
         shadow_model = trained_linear_model(features=shadow_features, class_labels=shadow_labels)
@@ -88,7 +95,9 @@ class ConvModelTrainer:
             weights = torch.stack([shadow_model.layers[0].weight, proxy_model.layers[0].weight], dim=2)
             biases = torch.stack([shadow_model.layers[0].bias, proxy_model.layers[0].bias], dim=1)
 
-        return weights, biases, torch.cat([shadow_features, proxy_features], dim=0), train_labels, membership_labels
+        return weights, biases, \
+               torch.cat([shadow_features, proxy_features], dim=0), torch.cat([shadow_labels, proxy_labels], dim=0), \
+               membership_labels
 
 
 
@@ -97,7 +106,10 @@ class ConvModelTrainer:
         split_seeds = torch.arange(num_dataset_splits)
 
         weights, biases, x, y, membership_labels = \
-            zip(*(self.training_minibatch(train_features, train_labels, seed=split_seeds[i]) for i in range(num_dataset_splits)))
+            zip(*(
+                self.training_minibatch(train_features, train_labels, seed=split_seeds[i])
+                for i in tqdm(range(num_dataset_splits))
+            ))
         weights, biases, x, y, membership_labels = \
             map(lambda data_tuple: torch.stack(data_tuple, dim=0), (weights, biases, x, y, membership_labels))
         weights = weights.unsqueeze(dim=1).expand(weights.shape[0], x.shape[1], *weights.shape[1:])
@@ -132,8 +144,11 @@ class ConvModelTrainer:
 
             attack_weights, attack_biases = self.model(shadow_weights, proxy_weights, shadow_biases, proxy_biases)
 
-            membership_predictions = torch.sigmoid(attack_weights.bmm(train_features.unsqueeze(dim=-1)).squeeze(dim=-1) + attack_biases)
-            membership_predictions = membership_predictions.gather(dim=1, index=train_labels.unsqueeze(dim=0)).round().squeeze()
+            membership_unnormalized_predictions = \
+                attack_weights.bmm(train_features.unsqueeze(dim=-1)).squeeze(dim=-1) + attack_biases
+            membership_predictions = torch.sigmoid(membership_unnormalized_predictions)
+            membership_predictions = membership_predictions.gather(dim=1, index=train_labels.unsqueeze(dim=0)).squeeze()
+
 
             self.scheduler.optimizer.zero_grad()
             loss = self.loss_fn(membership_predictions, membership_labels)
@@ -143,16 +158,31 @@ class ConvModelTrainer:
 
             #if progress_count % 50 == 0:
             #    print(f"Finished training DisplacementNet on datapoint {progress_count}/{len(training_dl)}")
+        return loss.item()
 
     def fit(self, train_features: torch.Tensor, train_labels: torch.Tensor,
             num_epochs=NUM_EPOCHS, num_shadow_models=NUM_SHADOW_MODELS):
         """
         num_shadow_models is N from paper
         """
-        print("Beginning training conv displacement model.")
+        print("-----Beginning training conv displacement model.-----")
         training_dl = self.get_training_batch(train_features, train_labels, num_shadow_models)
+
+        print("Training conv model on proxy-shadow model pairs")
+        best_loss = float('inf')
+        num_epochs_without_improvement = 0
         for _ in tqdm(range(num_epochs)):
-            self.train_epoch(training_dl)
+            loss = self.train_epoch(training_dl)
+
+            if loss >= best_loss:
+                num_epochs_without_improvement += 1
+            else:
+                num_epochs_without_improvement = 0
+                best_loss = loss
+            if num_epochs_without_improvement > NUM_PATIENCE_EPOCHS:
+                print(f"Stopping early due to no improvement for {NUM_PATIENCE_EPOCHS} epochs")
+                break
+
         print(f"Done.")
 
 #DELETE THIS COMMENT

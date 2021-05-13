@@ -19,7 +19,7 @@ def synthetic_dataset():
         torch.randn(size=(BATCH_SIZE // NUM_CLASSES, NUM_CLASSES, NUM_CLASS_FEATURES)).transpose(1, 2) # Gaussian
     ).transpose(1, 2) + class_means
 
-    # label data.  Features shape: (BATCH_SIZE, NUM_CLASS_FEATURES).  Labels shape: (BATCH_SIZE)
+    # label data.  Features shape: (BATCH_SIZE, NUM_CLASSES, NUM_CLASS_FEATURES).  Labels shape: (BATCH_SIZE)
     labels = torch.arange(NUM_CLASSES) \
         .unsqueeze(dim=1).unsqueeze(dim=0).expand(BATCH_SIZE // NUM_CLASSES, NUM_CLASSES, 1)
     dataset = torch.cat((class_features, labels), dim=2)
