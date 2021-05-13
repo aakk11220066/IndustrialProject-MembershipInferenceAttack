@@ -32,7 +32,7 @@ def experiment(seed: int, attack_model_class):
     trainer = get_linear_trainer(model=target_model)
     trainer.fit(target_train_features, target_train_labels, num_epochs=NUM_EPOCHS)
 
-    print(f"test acc = {trainer.accuracy(test_features=test_features, test_labels=test_labels)}")
+    print(f"Target model test accuracy = {trainer.accuracy(test_features=test_features, test_labels=test_labels)}")
 
 
     attack_model = get_attack_model(
@@ -65,6 +65,12 @@ def experiment(seed: int, attack_model_class):
     #result = classification_report(y_true, y_pred, labels=None, target_names=None, sample_weight=None, digits=2, output_dict=False, zero_division='warn')
     # print(result)
 
+    print(
+        f"Experiment report: \n ",
+        classification_report(y_true, y_pred,
+            labels=None, target_names=None, sample_weight=None, digits=2, output_dict=False, zero_division='warn'
+        )
+    )
     return y_true, y_pred
 
 
@@ -81,3 +87,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+#DELETE THIS COMMENT

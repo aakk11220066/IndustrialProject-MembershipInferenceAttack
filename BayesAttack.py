@@ -36,3 +36,5 @@ class BayesAttackModel(LinearModel):
         :return: (boolean) datapoint in training set?
         """
         return super().forward(x).gather(dim=1, index=y.unsqueeze(dim=1)) > 0.5
+
+#DELETE THIS COMMENT

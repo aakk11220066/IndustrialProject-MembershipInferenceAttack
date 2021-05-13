@@ -24,3 +24,5 @@ def german_dataset(filename = "German.csv"):
     test_data_size = dataset.shape[0] - train_data_size
     return dataset_features[:train_data_size], dataset_labels[:train_data_size], \
            dataset_features[-test_data_size:], dataset_labels[-test_data_size:]
+
+#DELETE THIS COMMENT

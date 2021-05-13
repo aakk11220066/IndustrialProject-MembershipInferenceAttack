@@ -28,3 +28,5 @@ class GeneralAttackModel(BayesAttackModel):
             proxy_biases=proxy_model.layers[0].bias
         )
         return attack_weight.squeeze(dim=0), attack_bias.squeeze(dim=0)
+
+#DELETE THIS COMMENT
