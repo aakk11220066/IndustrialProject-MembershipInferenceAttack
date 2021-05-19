@@ -1,12 +1,12 @@
 from torch import Tensor
-from BayesAttack import BayesAttackModel
-from Models import LinearModel, DisplacementNet
+from MLPDiscriminator import MLPDiscriminatorModel
+from Models import MLP, DisplacementNet
 from Configuration import NUM_EPOCHS
 from Trainer import get_conv_trainer
 
-class GeneralAttackModel(BayesAttackModel):
+class GeneralAttackModel(MLPDiscriminatorModel):
     def __init__(self,
-                 target_model: LinearModel,
+                 target_model: MLP,
                  attack_train_features: Tensor, attack_train_labels: Tensor):
         super().__init__(
             target_model=target_model,
@@ -21,12 +21,14 @@ class GeneralAttackModel(BayesAttackModel):
             self.attack_train_labels,
             num_epochs=NUM_EPOCHS
         )
-        attack_weight, attack_bias = self.weights_displacer(
-            shadow_weights=target_model.layers[0].weight,
-            proxy_weights=proxy_model.layers[0].weight,
-            shadow_biases=target_model.layers[0].bias,
-            proxy_biases=proxy_model.layers[0].bias
-        )
-        return attack_weight.squeeze(dim=0), attack_bias.squeeze(dim=0)
+        layer0_attack_weights, layer0_attack_bias, layer2_attack_weights, layer2_attack_bias = \
+            self.weights_displacer(
+                shadow_weights=target_model.layers[0].weight.unsqueeze(dim=0),
+                proxy_weights=proxy_model.layers[0].weight.unsqueeze(dim=0),
+                shadow_biases=target_model.layers[0].bias.unsqueeze(dim=0),
+                proxy_biases=proxy_model.layers[0].bias.unsqueeze(dim=0)
+            )
+        return layer0_attack_weights.squeeze(dim=0), layer0_attack_bias.squeeze(dim=0), \
+               layer2_attack_weights.squeeze(dim=0), layer2_attack_bias.squeeze(dim=0)
 
 #DELETE THIS COMMENT

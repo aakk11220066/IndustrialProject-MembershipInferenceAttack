@@ -1,33 +1,36 @@
 import torch
 import torch.nn as nn
-from Models import LinearModel
+from Models import MLP
 from Configuration import NUM_EPOCHS
 from Trainer import get_regular_model_trainer
 
-class BayesAttackModel(LinearModel):
+class MLPDiscriminatorModel(MLP):
     """
     Mathematical attack on linear target model under assumption of Gaussian distribution
     """
 
     def __init__(self,
-                 target_model: LinearModel,
+                 target_model: MLP,
                  attack_train_features: torch.Tensor, attack_train_labels: torch.Tensor):
         super().__init__(activation=nn.Sigmoid())
         self.attack_train_features = attack_train_features
         self.attack_train_labels = attack_train_labels
 
-        proxy_model = LinearModel()
+        proxy_model = MLP()
         get_regular_model_trainer(proxy_model).fit(attack_train_features, attack_train_labels, num_epochs=NUM_EPOCHS)
 
-        attack_weights, attack_bias = self.get_attack_params(target_model=target_model, proxy_model=proxy_model)
+        layer0_attack_weights, layer0_attack_bias, layer2_attack_weights, layer2_attack_bias = \
+            self.get_attack_params(target_model=target_model, proxy_model=proxy_model)
 
-        self.layers[0].weight = nn.Parameter(attack_weights)
-        self.layers[0].bias = nn.Parameter(attack_bias)
+        self.layers[0].weight = nn.Parameter(layer0_attack_weights)
+        self.layers[0].bias = nn.Parameter(layer0_attack_bias)
+        self.layers[2].weight = nn.Parameter(layer2_attack_weights)
+        self.layers[2].bias = nn.Parameter(layer2_attack_bias)
+
 
     def get_attack_params(self, target_model, proxy_model):
-        attack_weights = target_model.layers[0].weight - proxy_model.layers[0].weight
-        attack_bias = target_model.layers[0].bias - proxy_model.layers[0].bias
-        return attack_weights, attack_bias
+        raise NotImplementedError()
+
 
     def forward(self, x, y):
         """

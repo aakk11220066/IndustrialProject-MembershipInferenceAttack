@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
 from sklearn.metrics import classification_report
-from Models import LinearModel
+from Models import MLP
 from Configuration import SEEDS, NUM_EPOCHS, TARGET_TRAIN_DATA_SIZE
 from GermanDataset import german_dataset
 from BayesAttack import BayesAttackModel
 from GeneralAttack import GeneralAttackModel
-from Trainer import get_linear_trainer
+from Trainer import get_regular_model_trainer
 
 def split_dataset(dataset):
     return dataset[:TARGET_TRAIN_DATA_SIZE], dataset[TARGET_TRAIN_DATA_SIZE:]
@@ -28,8 +28,8 @@ def experiment(seed: int, attack_model_class):
     target_train_features, proxy_train_features = split_dataset(train_features)
     target_train_labels, proxy_train_labels = split_dataset(train_labels)
 
-    target_model = LinearModel()
-    trainer = get_linear_trainer(model=target_model)
+    target_model = MLP()
+    trainer = get_regular_model_trainer(model=target_model)
     trainer.fit(target_train_features, target_train_labels, num_epochs=NUM_EPOCHS)
 
     print(f"Target model test accuracy = {trainer.accuracy(test_features=test_features, test_labels=test_labels)}")
