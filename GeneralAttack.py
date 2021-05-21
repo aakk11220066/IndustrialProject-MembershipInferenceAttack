@@ -16,18 +16,22 @@ class GeneralAttackModel(MLPDiscriminatorModel):
 
     def get_attack_params(self, target_model, proxy_model):
         self.weights_displacer = DisplacementNet()
-        get_conv_trainer(model=self.weights_displacer).fit(
+        get_conv_trainer(model=self.weights_displacer, target_model=target_model).fit(
             self.attack_train_features,
             self.attack_train_labels,
             num_epochs=NUM_EPOCHS
         )
         layer0_attack_weights, layer0_attack_bias, layer2_attack_weights, layer2_attack_bias = \
             self.weights_displacer(
-                shadow_weights=target_model.layers[0].weight.unsqueeze(dim=0),
-                proxy_weights=proxy_model.layers[0].weight.unsqueeze(dim=0),
-                shadow_biases=target_model.layers[0].bias.unsqueeze(dim=0),
-                proxy_biases=proxy_model.layers[0].bias.unsqueeze(dim=0)
-            )
+                layer0_shadow_weights=target_model.layers[0].weight.unsqueeze(dim=0),
+                layer0_proxy_weights=proxy_model.layers[0].weight.unsqueeze(dim=0),
+                layer0_shadow_biases=target_model.layers[0].bias.unsqueeze(dim=0),
+                layer0_proxy_biases=proxy_model.layers[0].bias.unsqueeze(dim=0),
+                layer2_shadow_weights = target_model.layers[2].weight.unsqueeze(dim=0),
+                layer2_proxy_weights = proxy_model.layers[2].weight.unsqueeze(dim=0),
+                layer2_shadow_biases = target_model.layers[2].bias.unsqueeze(dim=0),
+                layer2_proxy_biases = proxy_model.layers[2].bias.unsqueeze(dim=0)
+        )
         return layer0_attack_weights.squeeze(dim=0), layer0_attack_bias.squeeze(dim=0), \
                layer2_attack_weights.squeeze(dim=0), layer2_attack_bias.squeeze(dim=0)
 

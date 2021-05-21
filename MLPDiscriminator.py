@@ -21,6 +21,8 @@ class MLPDiscriminatorModel(MLP):
 
         layer0_attack_weights, layer0_attack_bias, layer2_attack_weights, layer2_attack_bias = \
             self.get_attack_params(target_model=target_model, proxy_model=proxy_model)
+        layer0_attack_weights = layer0_attack_weights.squeeze(dim=0)
+        layer2_attack_weights = layer2_attack_weights.squeeze(dim=0)
 
         self.layers[0].weight = nn.Parameter(layer0_attack_weights)
         self.layers[0].bias = nn.Parameter(layer0_attack_bias)

@@ -12,14 +12,17 @@ from Loss import EntropyAndSyncLoss
 def get_regular_model_trainer(model: nn.Module, loss=nn.CrossEntropyLoss()):
     optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01,betas=(0.9, 0.999), eps=1e-08,amsgrad=False)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=DECAY_RATE)
-    return ModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler)
+    result = ModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler)
+    if type(loss) != EntropyAndSyncLoss:
+        return result
+    return AttackModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler)
 
 
-def get_conv_trainer(model: nn.Module):
+def get_conv_trainer(model: nn.Module, target_model: nn.Module):
     optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01,betas=(0.9, 0.999), eps=1e-08, amsgrad=False)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=DECAY_RATE)
     loss = nn.BCELoss()
-    return ConvModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler)
+    return ConvModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler, target_model=target_model)
 
 class ModelTrainer:
     def __init__(self, model: nn.Module, loss_fn: nn.Module, optimization_scheduler: torch.optim.Optimizer):
@@ -30,7 +33,7 @@ class ModelTrainer:
     def train_batch(self, train_features: torch.Tensor, train_labels: torch.Tensor):
         confidence_levels = self.model(train_features)  # (BATCH_SIZE, NUM_FEATURES) -> (BATCH_SIZE, NUM_CLASSES)
         self.scheduler.optimizer.zero_grad()
-        self.loss_fn(confidence_levels, train_labels).backward() # TODO: add intermediary pre-activation results of target & attack models
+        self.loss_fn(confidence_levels, train_labels).backward()
         self.scheduler.optimizer.step()
         self.scheduler.step()
 
@@ -50,14 +53,24 @@ class ModelTrainer:
             print(f"Done.  Training accuracy: {self.accuracy(train_features, train_labels)}")
 
 
+class AttackModelTrainer(ModelTrainer):
+    def train_batch(self, train_features: torch.Tensor, train_labels: torch.Tensor):
+        confidence_levels = self.model(train_features)  # (BATCH_SIZE, NUM_FEATURES) -> (BATCH_SIZE, NUM_CLASSES)
+        self.scheduler.optimizer.zero_grad()
+        self.loss_fn(confidence_levels, train_labels, train_features).backward()
+        self.scheduler.optimizer.step()
+        self.scheduler.step()
+
+
 def trained_linear_model(features: Tensor, class_labels: Tensor):
     model = LinearModel()
     get_regular_model_trainer(model).fit(features, class_labels, num_epochs=NUM_EPOCHS)
     return model
 
-def trained_attack_MLP_model(features: Tensor, class_labels: Tensor):
+def trained_attack_MLP_model(features: Tensor, class_labels: Tensor, target_model: nn.Module):
     model = MLP()
-    get_regular_model_trainer(model, loss=EntropyAndSyncLoss()).fit(features, class_labels, num_epochs=NUM_EPOCHS)
+    get_regular_model_trainer(model, loss=EntropyAndSyncLoss(model, target_model))\
+        .fit(features, class_labels, num_epochs=NUM_EPOCHS)
     return model
 
 
@@ -71,10 +84,11 @@ def split_dataset(features, labels):
 
 
 class ConvModelTrainer:
-    def __init__(self, model: nn.Module, loss_fn: nn.Module, optimization_scheduler: torch.optim.Optimizer):
+    def __init__(self, model: nn.Module, loss_fn: nn.Module, optimization_scheduler: torch.optim.Optimizer, target_model):
         self.model = model
         self.loss_fn = loss_fn
         self.scheduler = optimization_scheduler
+        self.target_model = target_model
 
     def training_minibatch(self, train_features, train_labels, seed=0):
         """
@@ -88,8 +102,8 @@ class ConvModelTrainer:
         shadow_labels, proxy_labels = shadow_labels.long(), proxy_labels.long()
 
         # construct models
-        shadow_model = trained_attack_MLP_model(features=shadow_features, class_labels=shadow_labels)
-        proxy_model = trained_attack_MLP_model(features=proxy_features, class_labels=proxy_labels)
+        shadow_model = trained_attack_MLP_model(features=shadow_features, class_labels=shadow_labels, target_model=self.target_model)
+        proxy_model = trained_attack_MLP_model(features=proxy_features, class_labels=proxy_labels, target_model=self.target_model)
 
         membership_labels = torch.cat([
             torch.ones(shadow_features.shape[0]),
@@ -175,11 +189,13 @@ class ConvModelTrainer:
                 layer0_shadow_weights, layer0_proxy_weights, layer0_shadow_biases, layer0_proxy_biases,
                 layer2_shadow_weights, layer2_proxy_weights, layer2_shadow_biases, layer2_proxy_biases
             )
+            layer0_attack_weights = layer0_attack_weights.squeeze(dim=1)
+            layer2_attack_weights = layer2_attack_weights.squeeze(dim=1)
 
             membership_unnormalized_predictions = \
                 layer0_attack_weights.bmm(train_features.unsqueeze(dim=-1)).squeeze(dim=-1) + \
                 layer0_attack_biases
-            membership_unnormalized_predictions = nn.relu(membership_unnormalized_predictions)
+            membership_unnormalized_predictions = torch.relu(membership_unnormalized_predictions)
             membership_unnormalized_predictions = \
                 layer2_attack_weights.bmm(membership_unnormalized_predictions.unsqueeze(dim=-1)).squeeze(dim=-1) + \
                 layer2_attack_biases

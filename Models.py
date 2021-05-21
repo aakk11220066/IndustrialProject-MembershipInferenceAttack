@@ -53,6 +53,7 @@ class DisplacementNet(nn.Module):
         if len(proxy_biases.shape) < 2:
             proxy_biases = proxy_biases.unsqueeze(dim=0)'''
 
+        # TODO: try 2 separate convolution, 1 for each layer?
         layer0_attack_weights = self.conv(torch.stack((layer0_shadow_weights, layer0_proxy_weights), dim=1))
         layer0_attack_biases = self.conv(torch.stack((layer0_shadow_biases, layer0_proxy_biases), dim=1)
                                          .unsqueeze(dim=-1)).squeeze(dim=-1).squeeze(dim=1)
