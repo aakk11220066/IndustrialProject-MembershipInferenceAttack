@@ -40,7 +40,8 @@ class MLP(nn.Module):
 class DisplacementNet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=1)
+        self.layer0_conv = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=1)
+        self.layer2_conv = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=1)
 
     def forward(self, layer0_shadow_weights, layer0_proxy_weights, layer0_shadow_biases, layer0_proxy_biases,
                 layer2_shadow_weights, layer2_proxy_weights, layer2_shadow_biases, layer2_proxy_biases):
@@ -53,12 +54,11 @@ class DisplacementNet(nn.Module):
         if len(proxy_biases.shape) < 2:
             proxy_biases = proxy_biases.unsqueeze(dim=0)'''
 
-        # TODO: try 2 separate convolution, 1 for each layer?
-        layer0_attack_weights = self.conv(torch.stack((layer0_shadow_weights, layer0_proxy_weights), dim=1))
-        layer0_attack_biases = self.conv(torch.stack((layer0_shadow_biases, layer0_proxy_biases), dim=1)
+        layer0_attack_weights = self.layer0_conv(torch.stack((layer0_shadow_weights, layer0_proxy_weights), dim=1))
+        layer0_attack_biases = self.layer0_conv(torch.stack((layer0_shadow_biases, layer0_proxy_biases), dim=1)
                                          .unsqueeze(dim=-1)).squeeze(dim=-1).squeeze(dim=1)
-        layer2_attack_weights = self.conv(torch.stack((layer2_shadow_weights, layer2_proxy_weights), dim=1))
-        layer2_attack_biases = self.conv(torch.stack((layer2_shadow_biases, layer2_proxy_biases), dim=1)
+        layer2_attack_weights = self.layer2_conv(torch.stack((layer2_shadow_weights, layer2_proxy_weights), dim=1))
+        layer2_attack_biases = self.layer2_conv(torch.stack((layer2_shadow_biases, layer2_proxy_biases), dim=1)
                                          .unsqueeze(dim=-1)).squeeze(dim=-1).squeeze(dim=1)
 
         '''if len(attack_weights.shape) > 3:

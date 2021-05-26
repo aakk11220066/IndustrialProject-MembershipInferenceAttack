@@ -6,14 +6,14 @@ from Models import LinearModel, MLP
 from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE, NUM_SHADOW_MODELS, MINIBATCH_SIZE, DECAY_RATE, \
     NUM_PATIENCE_EPOCHS, VERBOSE_REGULAR_TRAINING, VERBOSE_CONVOLUTION_TRAINING
 from SyntheticDataset import _shuffle_rows
-from Loss import EntropyAndSyncLoss
+from Loss import EntropyAndSyncLoss, SynchronizationLoss
 
 
 def get_regular_model_trainer(model: nn.Module, loss=nn.CrossEntropyLoss()):
     optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01,betas=(0.9, 0.999), eps=1e-08,amsgrad=False)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=DECAY_RATE)
     result = ModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler)
-    if type(loss) != EntropyAndSyncLoss:
+    if type(loss) == nn.CrossEntropyLoss:
         return result
     return AttackModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler)
 
@@ -67,12 +67,17 @@ def trained_linear_model(features: Tensor, class_labels: Tensor):
     get_regular_model_trainer(model).fit(features, class_labels, num_epochs=NUM_EPOCHS)
     return model
 
-def trained_attack_MLP_model(features: Tensor, class_labels: Tensor, target_model: nn.Module):
+def trained_proxy_MLP_model(features: Tensor, class_labels: Tensor, target_model: nn.Module):
     model = MLP()
     get_regular_model_trainer(model, loss=EntropyAndSyncLoss(model, target_model))\
         .fit(features, class_labels, num_epochs=NUM_EPOCHS)
     return model
 
+def trained_shadow_MLP_model(features: Tensor, class_labels: Tensor, target_model: nn.Module):
+    model = MLP()
+    get_regular_model_trainer(model, loss=SynchronizationLoss(model, target_model))\
+        .fit(features, class_labels, num_epochs=NUM_EPOCHS)
+    return model
 
 def split_dataset(features, labels):
     dataset = torch.cat([features, labels.unsqueeze(dim=-1)], dim=1)
@@ -102,8 +107,8 @@ class ConvModelTrainer:
         shadow_labels, proxy_labels = shadow_labels.long(), proxy_labels.long()
 
         # construct models
-        shadow_model = trained_attack_MLP_model(features=shadow_features, class_labels=shadow_labels, target_model=self.target_model)
-        proxy_model = trained_attack_MLP_model(features=proxy_features, class_labels=proxy_labels, target_model=self.target_model)
+        shadow_model = trained_shadow_MLP_model(features=shadow_features, class_labels=shadow_labels, target_model=self.target_model)
+        proxy_model = trained_proxy_MLP_model(features=proxy_features, class_labels=proxy_labels, target_model=self.target_model)
 
         membership_labels = torch.cat([
             torch.ones(shadow_features.shape[0]),
@@ -123,7 +128,7 @@ class ConvModelTrainer:
 
     def get_training_batch(self, train_features, train_labels, num_dataset_splits):
         print("Creating training batch")
-        split_seeds = torch.arange(num_dataset_splits)
+        split_seeds = torch.randperm(num_dataset_splits**2)[:num_dataset_splits]
 
         layer0_weights, layer0_biases, layer2_weights, layer2_biases, x, y, membership_labels = \
             zip(*(

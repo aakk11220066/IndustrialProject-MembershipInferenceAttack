@@ -4,9 +4,9 @@ from Models import MLP
 from Configuration import LAYER0_SYNC_LOSS_WEIGHT, LAYER2_SYNC_LOSS_WEIGHT
 
 
-class EntropyAndSyncLoss(nn.Module):
+class SynchronizationLoss(nn.Module):
     def __init__(self, attack_model, target_model):
-        super(EntropyAndSyncLoss, self).__init__()
+        super(SynchronizationLoss, self).__init__()
         self.attack_model = attack_model
         self.target_model = target_model
 
@@ -14,6 +14,7 @@ class EntropyAndSyncLoss(nn.Module):
     def forward(self, y_pred, y_true, features):
         # Compute attack and target model per-layer pre-activations
         # TODO: optimize by extracting these pre-activations from original model forward-prop instead of recomputing them
+        # y_pred and y_true go unused, only there in order to fit the abstract structure
         attack_model_results, target_model_results = [], []
         attack_model_results.append(self.attack_model.layers[0](features))
         attack_model_results.append(self.attack_model.layers[2](self.attack_model.layers[1](attack_model_results[0])))
@@ -21,6 +22,15 @@ class EntropyAndSyncLoss(nn.Module):
             target_model_results.append(self.target_model.layers[0](features))
             target_model_results.append(self.target_model.layers[2](self.target_model.layers[1](target_model_results[0])))
 
-        return nn.CrossEntropyLoss()(y_pred, y_true) + \
+        return \
             LAYER0_SYNC_LOSS_WEIGHT*nn.MSELoss()(attack_model_results[0], target_model_results[0]) + \
             LAYER2_SYNC_LOSS_WEIGHT*nn.MSELoss()(attack_model_results[1], target_model_results[1])
+
+
+class EntropyAndSyncLoss(nn.Module):
+    def __init__(self, attack_model, target_model):
+        super(EntropyAndSyncLoss, self).__init__()
+        self.sync_loss = SynchronizationLoss(attack_model=attack_model, target_model=target_model)
+
+    def forward(self, y_pred, y_true, features):
+        return nn.CrossEntropyLoss()(y_pred, y_true) + self.sync_loss(y_pred=y_pred, y_true=y_true, features=features)
