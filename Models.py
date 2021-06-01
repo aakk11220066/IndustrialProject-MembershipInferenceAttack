@@ -43,28 +43,22 @@ class DisplacementNet(nn.Module):
         self.layer0_conv = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=1)
         self.layer2_conv = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=1)
 
+        # To prevent ReLU saturation of attack model, we must ensure that attack weights
+        # start out non-negative.  But only initialize this way, from here on out we freely train the conv biases
+        self.layer0_conv.bias = nn.Parameter(self.layer0_conv.bias.abs())
+        self.layer2_conv.bias = nn.Parameter(self.layer2_conv.bias.abs())
+
+
     def forward(self, layer0_shadow_weights, layer0_proxy_weights, layer0_shadow_biases, layer0_proxy_biases,
                 layer2_shadow_weights, layer2_proxy_weights, layer2_shadow_biases, layer2_proxy_biases):
-        '''if len(shadow_weights.shape) < 3:
-            shadow_weights = shadow_weights.unsqueeze(dim=0)
-        if len(proxy_weights.shape) < 3:
-            proxy_weights = proxy_weights.unsqueeze(dim=0)
-        if len(shadow_biases.shape) < 2:
-            shadow_biases = shadow_biases.unsqueeze(dim=0)
-        if len(proxy_biases.shape) < 2:
-            proxy_biases = proxy_biases.unsqueeze(dim=0)'''
 
         layer0_attack_weights = self.layer0_conv(torch.stack((layer0_shadow_weights, layer0_proxy_weights), dim=1))
         layer0_attack_biases = self.layer0_conv(torch.stack((layer0_shadow_biases, layer0_proxy_biases), dim=1)
                                          .unsqueeze(dim=-1)).squeeze(dim=-1).squeeze(dim=1)
+
         layer2_attack_weights = self.layer2_conv(torch.stack((layer2_shadow_weights, layer2_proxy_weights), dim=1))
         layer2_attack_biases = self.layer2_conv(torch.stack((layer2_shadow_biases, layer2_proxy_biases), dim=1)
                                          .unsqueeze(dim=-1)).squeeze(dim=-1).squeeze(dim=1)
-
-        '''if len(attack_weights.shape) > 3:
-            attack_weights = attack_weights.squeeze(dim=1)
-        if len(attack_biases.shape) > 2:
-            attack_biases = attack_biases.squeeze(dim=1)'''
 
         return layer0_attack_weights, layer0_attack_biases, layer2_attack_weights, layer2_attack_biases
 
