@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch
 from torch import Tensor
@@ -86,6 +87,16 @@ def split_dataset(features, labels):
     labels = dataset[:, -1]
     return features[:SHADOW_TRAIN_DATA_SIZE], features[SHADOW_TRAIN_DATA_SIZE:], \
            labels[:SHADOW_TRAIN_DATA_SIZE], labels[SHADOW_TRAIN_DATA_SIZE:]
+
+
+# TODO: DELETE ME
+def temp_acc(membership_predictions, membership_labels):
+    confidence_levels = membership_predictions  # (BATCH_SIZE, NUM_FEATURES) -> (BATCH_SIZE, NUM_CLASSES)
+    test_labels = membership_labels
+    # class_label_predictions = confidence_levels.argmax(dim=1)  # (BATCH_SIZE, NUM_CLASSES) -> (BATCH_SIZE,)
+    class_label_predictions = confidence_levels.round()  # (BATCH_SIZE, NUM_CLASSES) -> (BATCH_SIZE,)
+    num_correct = (class_label_predictions == test_labels).sum().item()
+    return num_correct / test_labels.shape[0]
 
 
 class ConvModelTrainer:
@@ -177,6 +188,8 @@ class ConvModelTrainer:
         )
 
     def train_epoch(self, training_dl: torch.utils.data.DataLoader):
+        losses = []
+        accuracies = []
         for progress_count, membership_example in enumerate(training_dl):
             layer0_weights, layer0_biases, layer2_weights, layer2_biases, train_features, train_labels, membership_labels = \
                 membership_example
@@ -209,11 +222,13 @@ class ConvModelTrainer:
 
             self.scheduler.optimizer.zero_grad()
             loss = self.loss_fn(membership_predictions, membership_labels)
+            losses.append(loss.item())
+            accuracies.append(temp_acc(membership_predictions, membership_labels))
             loss.backward()
             self.scheduler.optimizer.step()
             self.scheduler.step()
 
-        return loss.item()
+        return losses, accuracies
 
     def fit(self, train_features: torch.Tensor, train_labels: torch.Tensor,
             num_epochs=NUM_EPOCHS, num_shadow_models=NUM_SHADOW_MODELS):
@@ -224,10 +239,15 @@ class ConvModelTrainer:
         training_dl = self.get_training_batch(train_features, train_labels, num_shadow_models)
 
         print("Training conv model on proxy-shadow model pairs")
+        losses = []
+        accuracies = []
         best_loss = float('inf')
         num_epochs_without_improvement = 0
         for _ in tqdm(range(num_epochs)):
-            loss = self.train_epoch(training_dl)
+            losses_addendum, accuracies_addendum = self.train_epoch(training_dl)
+            losses += losses_addendum
+            accuracies += accuracies_addendum
+            loss = losses[-1]
 
             if loss >= best_loss:
                 num_epochs_without_improvement += 1
@@ -238,5 +258,13 @@ class ConvModelTrainer:
                 print(f"\nStopping early due to no improvement for {NUM_PATIENCE_EPOCHS} epochs")
                 break
 
+        plt.scatter(list(range(len(losses)//2**9)), losses[:len(losses)//2**9])
+        plt.xlabel("Minibatch no.")
+        plt.ylabel("Loss")
+        plt.show()
+        plt.scatter(list(range(len(accuracies)//2**9)), accuracies[:len(accuracies)//2**9])
+        plt.xlabel("Minibatch no.")
+        plt.ylabel("Accuracy")
+        plt.show()
         print(f"Done.")
 

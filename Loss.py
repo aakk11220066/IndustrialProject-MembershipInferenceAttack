@@ -9,6 +9,7 @@ class SynchronizationLoss(nn.Module):
         super(SynchronizationLoss, self).__init__()
         self.attack_model = attack_model
         self.target_model = target_model
+        self.loss = nn.MSELoss()
 
 
     def forward(self, y_pred, y_true, features):
@@ -23,14 +24,15 @@ class SynchronizationLoss(nn.Module):
             target_model_results.append(self.target_model.layers[2](self.target_model.layers[1](target_model_results[0])))
 
         return \
-            LAYER0_SYNC_LOSS_WEIGHT*nn.MSELoss()(attack_model_results[0], target_model_results[0]) + \
-            LAYER2_SYNC_LOSS_WEIGHT*nn.MSELoss()(attack_model_results[1], target_model_results[1])
+            LAYER0_SYNC_LOSS_WEIGHT*self.loss(attack_model_results[0], target_model_results[0]) + \
+            LAYER2_SYNC_LOSS_WEIGHT*self.loss(attack_model_results[1], target_model_results[1])
 
 
 class EntropyAndSyncLoss(nn.Module):
     def __init__(self, attack_model, target_model):
         super(EntropyAndSyncLoss, self).__init__()
         self.sync_loss = SynchronizationLoss(attack_model=attack_model, target_model=target_model)
+        self.loss = nn.CrossEntropyLoss()
 
     def forward(self, y_pred, y_true, features):
-        return nn.CrossEntropyLoss()(y_pred, y_true) + self.sync_loss(y_pred=y_pred, y_true=y_true, features=features)
+        return self.loss(y_pred, y_true) + self.sync_loss(y_pred=y_pred, y_true=y_true, features=features)
