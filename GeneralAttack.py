@@ -7,16 +7,19 @@ from Trainer import get_conv_trainer
 class GeneralAttackModel(MLPDiscriminatorModel):
     def __init__(self,
                  target_model: MLP,
-                 attack_train_features: Tensor, attack_train_labels: Tensor):
+                 attack_train_features: Tensor, attack_train_labels: Tensor,
+                 test_features, test_labels):
         super().__init__(
             target_model=target_model,
-            attack_train_features=attack_train_features, attack_train_labels=attack_train_labels
+            attack_train_features=attack_train_features, attack_train_labels=attack_train_labels,
+            test_features=test_features, test_labels=test_labels
         )
 
 
-    def get_attack_params(self, target_model, proxy_model):
+    def get_attack_params(self, target_model, proxy_model, test_features, test_labels):
         self.weights_displacer = DisplacementNet()
-        get_conv_trainer(model=self.weights_displacer, target_model=target_model).fit(
+        get_conv_trainer(model=self.weights_displacer, target_model=target_model,
+                         test_features=test_features, test_labels=test_labels).fit(
             self.attack_train_features,
             self.attack_train_labels,
             num_epochs=NUM_EPOCHS

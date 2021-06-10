@@ -4,10 +4,11 @@ import torch
 from torch import Tensor
 from tqdm import tqdm
 from Models import LinearModel, MLP
-from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE, NUM_SHADOW_MODELS, MINIBATCH_SIZE, DECAY_RATE, \
-    NUM_PATIENCE_EPOCHS, VERBOSE_REGULAR_TRAINING, VERBOSE_CONVOLUTION_TRAINING
+from Configuration import  NUM_EPOCHS, SHADOW_TRAIN_DATA_SIZE, PROXY_TRAIN_DATA_SIZE, NUM_SHADOW_MODELS, MINIBATCH_SIZE, DECAY_RATE, \
+    NUM_PATIENCE_EPOCHS, VERBOSE_REGULAR_TRAINING, VERBOSE_CONVOLUTION_TRAINING, SHOW_SHADOW_PROXY_LOSS_GRAPHS
 from SyntheticDataset import _shuffle_rows
 from Loss import EntropyAndSyncLoss, SynchronizationLoss
+from Loss import display_losses, clear_losses, init_test_data
 
 
 def get_regular_model_trainer(model: nn.Module, loss=nn.CrossEntropyLoss()):
@@ -19,11 +20,12 @@ def get_regular_model_trainer(model: nn.Module, loss=nn.CrossEntropyLoss()):
     return AttackModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler)
 
 
-def get_conv_trainer(model: nn.Module, target_model: nn.Module):
+def get_conv_trainer(model: nn.Module, target_model: nn.Module, test_features, test_labels):
     optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01,betas=(0.9, 0.999), eps=1e-08, amsgrad=False)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=DECAY_RATE)
     loss = nn.BCELoss()
-    return ConvModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler, target_model=target_model)
+    return ConvModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler, target_model=target_model,
+                            test_features=test_features, test_labels=test_labels)
 
 class ModelTrainer:
     def __init__(self, model: nn.Module, loss_fn: nn.Module, optimization_scheduler: torch.optim.Optimizer):
@@ -68,43 +70,64 @@ def trained_linear_model(features: Tensor, class_labels: Tensor):
     get_regular_model_trainer(model).fit(features, class_labels, num_epochs=NUM_EPOCHS)
     return model
 
-def trained_proxy_MLP_model(features: Tensor, class_labels: Tensor, target_model: nn.Module):
+def trained_proxy_MLP_model(features: Tensor, class_labels: Tensor, target_model: nn.Module, test_features, test_labels):
     model = MLP()
-    get_regular_model_trainer(model, loss=EntropyAndSyncLoss(model, target_model))\
-        .fit(features, class_labels, num_epochs=NUM_EPOCHS)
+    trainer = get_regular_model_trainer(model, loss=EntropyAndSyncLoss(model, target_model))
+    trainer.fit(features, class_labels, num_epochs=NUM_EPOCHS)
+    if SHOW_SHADOW_PROXY_LOSS_GRAPHS:
+        display_losses(model_type="Proxy")
+    clear_losses()
+    #print(f"Proxy model test accuracy = {trainer.accuracy(test_features=test_features, test_labels=test_labels)}")
     return model
 
-def trained_shadow_MLP_model(features: Tensor, class_labels: Tensor, target_model: nn.Module):
+def trained_shadow_MLP_model(features: Tensor, class_labels: Tensor, target_model: nn.Module, test_features, test_labels):
     model = MLP()
-    get_regular_model_trainer(model, loss=SynchronizationLoss(model, target_model))\
-        .fit(features, class_labels, num_epochs=NUM_EPOCHS)
+    trainer = get_regular_model_trainer(model, loss=SynchronizationLoss(model, target_model))
+    trainer.fit(features, class_labels, num_epochs=NUM_EPOCHS)
+    if SHOW_SHADOW_PROXY_LOSS_GRAPHS:
+        display_losses(model_type="Shadow")
+    clear_losses()
+    #print(f"\nShadow model test accuracy = {trainer.accuracy(test_features=test_features, test_labels=test_labels)}")
     return model
+
 
 def split_dataset(features, labels):
     dataset = torch.cat([features, labels.unsqueeze(dim=-1)], dim=1)
     dataset = _shuffle_rows(dataset)
     features = dataset[:, :-1]
     labels = dataset[:, -1]
-    return features[:SHADOW_TRAIN_DATA_SIZE], features[SHADOW_TRAIN_DATA_SIZE:], \
-           labels[:SHADOW_TRAIN_DATA_SIZE], labels[SHADOW_TRAIN_DATA_SIZE:]
+    return features[: SHADOW_TRAIN_DATA_SIZE], \
+           features[SHADOW_TRAIN_DATA_SIZE : SHADOW_TRAIN_DATA_SIZE + PROXY_TRAIN_DATA_SIZE], \
+           features[SHADOW_TRAIN_DATA_SIZE + PROXY_TRAIN_DATA_SIZE :], \
+           labels[: SHADOW_TRAIN_DATA_SIZE], \
+           labels[SHADOW_TRAIN_DATA_SIZE : SHADOW_TRAIN_DATA_SIZE + PROXY_TRAIN_DATA_SIZE], \
+           labels[SHADOW_TRAIN_DATA_SIZE + PROXY_TRAIN_DATA_SIZE :]
 
 
-# TODO: DELETE ME
+# DELETEME
 def temp_acc(membership_predictions, membership_labels):
     confidence_levels = membership_predictions  # (BATCH_SIZE, NUM_FEATURES) -> (BATCH_SIZE, NUM_CLASSES)
     test_labels = membership_labels
     # class_label_predictions = confidence_levels.argmax(dim=1)  # (BATCH_SIZE, NUM_CLASSES) -> (BATCH_SIZE,)
-    class_label_predictions = confidence_levels.round()  # (BATCH_SIZE, NUM_CLASSES) -> (BATCH_SIZE,)
+    class_label_predictions = torch.stack([1-confidence_levels, confidence_levels], dim=1).multinomial(1).squeeze(dim=1)  # (BATCH_SIZE, NUM_CLASSES) -> (BATCH_SIZE,)
     num_correct = (class_label_predictions == test_labels).sum().item()
     return num_correct / test_labels.shape[0]
 
 
 class ConvModelTrainer:
-    def __init__(self, model: nn.Module, loss_fn: nn.Module, optimization_scheduler: torch.optim.Optimizer, target_model):
+    def __init__(self, model: nn.Module, loss_fn: nn.Module, optimization_scheduler: torch.optim.Optimizer,
+                 target_model, test_features, test_labels):
         self.model = model
         self.loss_fn = loss_fn
         self.scheduler = optimization_scheduler
         self.target_model = target_model
+
+        # DELETEME
+        self.test_features = test_features
+        self.test_labels = test_labels
+
+        # DELETEME
+        init_test_data(test_features, test_labels)
 
     def training_minibatch(self, train_features, train_labels, seed=0):
         """
@@ -114,16 +137,17 @@ class ConvModelTrainer:
         torch.random.manual_seed(seed)
 
         # split dataset
-        shadow_features, proxy_features, shadow_labels, proxy_labels = split_dataset(train_features, train_labels)
-        shadow_labels, proxy_labels = shadow_labels.long(), proxy_labels.long()
+        shadow_features, proxy_features, holdout_features, shadow_labels, proxy_labels, holdout_labels = \
+            split_dataset(train_features, train_labels)
+        shadow_labels, proxy_labels, holdout_labels = shadow_labels.long(), proxy_labels.long(), holdout_labels.long()
 
         # construct models
-        shadow_model = trained_shadow_MLP_model(features=shadow_features, class_labels=shadow_labels, target_model=self.target_model)
-        proxy_model = trained_proxy_MLP_model(features=proxy_features, class_labels=proxy_labels, target_model=self.target_model)
+        shadow_model = trained_shadow_MLP_model(features=shadow_features, class_labels=shadow_labels, target_model=self.target_model, test_features=self.test_features, test_labels=self.test_labels)
+        proxy_model = trained_proxy_MLP_model(features=proxy_features, class_labels=proxy_labels, target_model=self.target_model, test_features=self.test_features, test_labels=self.test_labels)
 
         membership_labels = torch.cat([
             torch.ones(shadow_features.shape[0]),
-            torch.zeros(proxy_features.shape[0])
+            torch.zeros(holdout_features.shape[0])
         ], dim=0)
         with torch.no_grad():
             layer0_weights = torch.stack([shadow_model.layers[0].weight, proxy_model.layers[0].weight], dim=2)
@@ -132,7 +156,7 @@ class ConvModelTrainer:
             layer2_biases = torch.stack([shadow_model.layers[2].bias, proxy_model.layers[2].bias], dim=1)
 
         return layer0_weights, layer0_biases, layer2_weights, layer2_biases, \
-               torch.cat([shadow_features, proxy_features], dim=0), torch.cat([shadow_labels, proxy_labels], dim=0), \
+               torch.cat([shadow_features, holdout_features], dim=0), torch.cat([shadow_labels, holdout_labels], dim=0), \
                membership_labels
 
 
@@ -165,8 +189,8 @@ class ConvModelTrainer:
             .expand(layer2_biases.shape[0], x.shape[1], *layer2_biases.shape[1:])
         '''
         Definitions: 
-        matrix_pair = (NUM_CLASSES, NUM_CLASS_FEATURES, |{proxy_dataset, shadow_dataset}|)
-        bias_pair = (NUM_CLASSES, |{proxy_dataset, shadow_dataset}|)
+        matrix_pair = (NUM_CLASSES, NUM_CLASS_FEATURES, |{holdout_dataset, shadow_dataset}|)
+        bias_pair = (NUM_CLASSES, |{holdout_dataset, shadow_dataset}|)
 
         weights.shape == (NUM_SHADOW_MODELS, ATTACK_TRAIN_DATA_SIZE, matrix_pair)
         biases.shape == (NUM_SHADOW_MODELS, ATTACK_TRAIN_DATA_SIZE, bias_pair)
@@ -258,13 +282,15 @@ class ConvModelTrainer:
                 print(f"\nStopping early due to no improvement for {NUM_PATIENCE_EPOCHS} epochs")
                 break
 
-        plt.scatter(list(range(len(losses)//2**9)), losses[:len(losses)//2**9])
+        # DELETEME
+        plt.plot(list(range(len(losses)//2**9)), losses[:len(losses)//2**9], color="b")
         plt.xlabel("Minibatch no.")
-        plt.ylabel("Loss")
+        plt.ylabel("Attack loss")
         plt.show()
-        plt.scatter(list(range(len(accuracies)//2**9)), accuracies[:len(accuracies)//2**9])
+        plt.plot(list(range(len(accuracies)//2**9)), accuracies[:len(accuracies)//2**9], color="r")
         plt.xlabel("Minibatch no.")
-        plt.ylabel("Accuracy")
+        plt.ylabel("Attack accuracy")
         plt.show()
+
         print(f"Done.")
 

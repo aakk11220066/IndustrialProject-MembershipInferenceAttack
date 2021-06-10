@@ -12,11 +12,13 @@ def split_dataset(dataset):
     return dataset[:TARGET_TRAIN_DATA_SIZE], dataset[TARGET_TRAIN_DATA_SIZE:]
 
 
-def get_attack_model(attack_model_class, target_model, attack_train_features, attack_train_labels):
+def get_attack_model(attack_model_class, target_model, attack_train_features, attack_train_labels,
+                     test_features, test_labels):
     return attack_model_class(
         target_model=target_model,
         attack_train_features=attack_train_features,
-        attack_train_labels=attack_train_labels
+        attack_train_labels=attack_train_labels,
+        test_features=test_features, test_labels=test_labels
     )
 
 
@@ -39,7 +41,8 @@ def experiment(seed: int, attack_model_class):
         attack_model_class=attack_model_class,
         target_model=target_model,
         attack_train_features=proxy_train_features,
-        attack_train_labels=proxy_train_labels
+        attack_train_labels=proxy_train_labels,
+        test_features=test_features, test_labels=test_labels # DELETEME
     )
 
     correct_intrainset_predictions = (
