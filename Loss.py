@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 from Models import MLP
-from Configuration import LAYER0_SYNC_LOSS_WEIGHT, LAYER2_SYNC_LOSS_WEIGHT
+from Configuration import LAYER0_SYNC_LOSS_WEIGHT_SHADOW, LAYER2_SYNC_LOSS_WEIGHT_SHADOW, LAYER0_SYNC_LOSS_WEIGHT_PROXY, LAYER2_SYNC_LOSS_WEIGHT_PROXY
 import matplotlib.pyplot as plt
 
 # DELETEME: from here...
@@ -22,7 +22,8 @@ def temp_acc(predictions, labels):
     confidence_levels = predictions  # (BATCH_SIZE, NUM_FEATURES) -> (BATCH_SIZE, NUM_CLASSES)
     test_labels = labels
     # class_label_predictions = confidence_levels.argmax(dim=1)  # (BATCH_SIZE, NUM_CLASSES) -> (BATCH_SIZE,)
-    class_label_predictions = torch.stack([1-confidence_levels, confidence_levels], dim=1).multinomial(1).squeeze(dim=1)  # (BATCH_SIZE, NUM_CLASSES) -> (BATCH_SIZE,)
+    #class_label_predictions = torch.stack([1-confidence_levels, confidence_levels], dim=1).multinomial(1).squeeze(dim=1)  # (BATCH_SIZE, NUM_CLASSES) -> (BATCH_SIZE,)
+    class_label_predictions = confidence_levels.round()*1.01
     num_correct = (class_label_predictions == test_labels).sum().item()
     return num_correct / test_labels.shape[0]
 
@@ -57,11 +58,12 @@ def clear_losses():
 # DELETEME: ...until here
 
 class SynchronizationLoss(nn.Module):
-    def __init__(self, attack_model, target_model):
+    def __init__(self, attack_model, target_model, type):
         super(SynchronizationLoss, self).__init__()
         self.attack_model = attack_model
         self.target_model = target_model
         self.loss = nn.MSELoss()
+        self.type = type
 
 
     def forward(self, y_pred, y_true, features):
@@ -74,9 +76,14 @@ class SynchronizationLoss(nn.Module):
         with torch.no_grad(): # To prevent training from propagating back to the target model, which must be left untouched
             target_model_results.append(self.target_model.layers[0](features))
             target_model_results.append(self.target_model.layers[2](self.target_model.layers[1](target_model_results[0])))
-
-        layer0_sync_loss = LAYER0_SYNC_LOSS_WEIGHT*self.loss(attack_model_results[0], target_model_results[0])
-        layer2_sync_loss = LAYER2_SYNC_LOSS_WEIGHT*self.loss(attack_model_results[1], target_model_results[1])
+        if type == "SHADOW":
+            layer0_weight = LAYER0_SYNC_LOSS_WEIGHT_SHADOW
+            layer2_weight = LAYER2_SYNC_LOSS_WEIGHT_SHADOW
+        else:
+            layer0_weight = LAYER0_SYNC_LOSS_WEIGHT_PROXY
+            layer2_weight = LAYER2_SYNC_LOSS_WEIGHT_PROXY
+        layer0_sync_loss = layer0_weight*self.loss(attack_model_results[0], target_model_results[0])
+        layer2_sync_loss = layer2_weight*self.loss(attack_model_results[1], target_model_results[1])
 
         # DELETEME
         global layer0_sync_losses, layer2_sync_losses, training_accuracies, testing_accuracies, test_features, test_labels
@@ -89,13 +96,15 @@ class SynchronizationLoss(nn.Module):
 
 
 class EntropyAndSyncLoss(nn.Module):
-    def __init__(self, attack_model, target_model):
+    def __init__(self, attack_model, target_model, type):
         super(EntropyAndSyncLoss, self).__init__()
-        self.sync_loss = SynchronizationLoss(attack_model=attack_model, target_model=target_model)
+        self.sync_loss = SynchronizationLoss(attack_model=attack_model, target_model=target_model,type=type)
         self.loss = nn.CrossEntropyLoss()
 
     def forward(self, y_pred, y_true, features):
         loss = self.loss(y_pred, y_true)
         global crossentropy_losses
-        crossentropy_losses.append(loss.item()) # DELETEME
+        crossentropy_losses.append(loss.item())
+        if self.type=="SHADOW":
+            loss*=0.5
         return loss + self.sync_loss(y_pred=y_pred, y_true=y_true, features=features)

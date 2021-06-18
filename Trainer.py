@@ -10,7 +10,7 @@ from SyntheticDataset import _shuffle_rows
 from Loss import EntropyAndSyncLoss, SynchronizationLoss
 from Loss import display_losses, clear_losses, init_test_data
 
-
+layer0_weight, layer2_weight, layer0_bias, layer2_bias= 0,0,0,0
 def get_regular_model_trainer(model: nn.Module, loss=nn.CrossEntropyLoss()):
     optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01,betas=(0.9, 0.999), eps=1e-08,amsgrad=False)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=DECAY_RATE)
@@ -21,7 +21,7 @@ def get_regular_model_trainer(model: nn.Module, loss=nn.CrossEntropyLoss()):
 
 
 def get_conv_trainer(model: nn.Module, target_model: nn.Module, test_features, test_labels):
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=0.01,betas=(0.9, 0.999), eps=1e-08, amsgrad=False)
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=0.001, weight_decay=0.01 ,betas=(0.85, 0.999), eps=1e-05, amsgrad=False)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=DECAY_RATE)
     loss = nn.BCELoss()
     return ConvModelTrainer(model=model, loss_fn=loss, optimization_scheduler=scheduler, target_model=target_model,
@@ -72,7 +72,7 @@ def trained_linear_model(features: Tensor, class_labels: Tensor):
 
 def trained_proxy_MLP_model(features: Tensor, class_labels: Tensor, target_model: nn.Module, test_features, test_labels):
     model = MLP()
-    trainer = get_regular_model_trainer(model, loss=EntropyAndSyncLoss(model, target_model))
+    trainer = get_regular_model_trainer(model, loss=EntropyAndSyncLoss(model, target_model, type="PROXY"))
     trainer.fit(features, class_labels, num_epochs=NUM_EPOCHS)
     if SHOW_SHADOW_PROXY_LOSS_GRAPHS:
         display_losses(model_type="Proxy")
@@ -82,7 +82,7 @@ def trained_proxy_MLP_model(features: Tensor, class_labels: Tensor, target_model
 
 def trained_shadow_MLP_model(features: Tensor, class_labels: Tensor, target_model: nn.Module, test_features, test_labels):
     model = MLP()
-    trainer = get_regular_model_trainer(model, loss=SynchronizationLoss(model, target_model))
+    trainer = get_regular_model_trainer(model, loss=EntropyAndSyncLoss(model, target_model, type="SHADOW"))
     trainer.fit(features, class_labels, num_epochs=NUM_EPOCHS)
     if SHOW_SHADOW_PROXY_LOSS_GRAPHS:
         display_losses(model_type="Shadow")
@@ -109,7 +109,9 @@ def temp_acc(membership_predictions, membership_labels):
     confidence_levels = membership_predictions  # (BATCH_SIZE, NUM_FEATURES) -> (BATCH_SIZE, NUM_CLASSES)
     test_labels = membership_labels
     # class_label_predictions = confidence_levels.argmax(dim=1)  # (BATCH_SIZE, NUM_CLASSES) -> (BATCH_SIZE,)
-    class_label_predictions = torch.stack([1-confidence_levels, confidence_levels], dim=1).multinomial(1).squeeze(dim=1)  # (BATCH_SIZE, NUM_CLASSES) -> (BATCH_SIZE,)
+    # class_label_predictions = torch.stack([1 - confidence_levels, confidence_levels], dim=1).multinomial(1).squeeze(
+    #      dim=1)  # (BATCH_SIZE, NUM_CLASSES) -> (BATCH_SIZE,)
+    class_label_predictions = confidence_levels.round()
     num_correct = (class_label_predictions == test_labels).sum().item()
     return num_correct / test_labels.shape[0]
 
@@ -267,7 +269,7 @@ class ConvModelTrainer:
         accuracies = []
         best_loss = float('inf')
         num_epochs_without_improvement = 0
-        for _ in tqdm(range(num_epochs)):
+        for i in tqdm(range(num_epochs)):
             losses_addendum, accuracies_addendum = self.train_epoch(training_dl)
             losses += losses_addendum
             accuracies += accuracies_addendum
@@ -278,16 +280,23 @@ class ConvModelTrainer:
             else:
                 num_epochs_without_improvement = 0
                 best_loss = loss
-            if num_epochs_without_improvement > NUM_PATIENCE_EPOCHS:
+                best_acc = accuracies[-1]
+                # layer0_weight, layer2_weight, layer0_bias, layer2_bias =\
+                #     torch.nn.Parameter(self.model.layer0_conv.weight), self.model.layer2_conv.weight, self.model.layer0_conv.bias, self.model.layer2_conv.bias
+                # conv0 = self.model.layer0_conv
+                # conv2 = self.model.layer2_conv
+                print(f"Good Loss = {best_loss} -> model saved!")
+            if num_epochs_without_improvement > NUM_PATIENCE_EPOCHS and i>8:
                 print(f"\nStopping early due to no improvement for {NUM_PATIENCE_EPOCHS} epochs")
                 break
 
         # DELETEME
-        plt.plot(list(range(len(losses)//2**9)), losses[:len(losses)//2**9], color="b")
+        plt.plot(list(range(len(losses))), losses[:len(losses)], color="b")
         plt.xlabel("Minibatch no.")
         plt.ylabel("Attack loss")
         plt.show()
-        plt.plot(list(range(len(accuracies)//2**9)), accuracies[:len(accuracies)//2**9], color="r")
+        plt.plot(list(range(len(accuracies))), accuracies[:len(accuracies)], color="r")
+        print(f"train acc = {best_acc}")
         plt.xlabel("Minibatch no.")
         plt.ylabel("Attack accuracy")
         plt.show()

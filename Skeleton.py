@@ -7,9 +7,11 @@ from GermanDataset import german_dataset
 from BayesAttack import BayesAttackModel
 from GeneralAttack import GeneralAttackModel
 from Trainer import get_regular_model_trainer
-
+from Models import DisplacementNet
+from Trainer import layer0_weight, layer2_weight, layer0_bias, layer2_bias
 def split_dataset(dataset):
     return dataset[:TARGET_TRAIN_DATA_SIZE], dataset[TARGET_TRAIN_DATA_SIZE:]
+
 
 
 def get_attack_model(attack_model_class, target_model, attack_train_features, attack_train_labels,
@@ -44,7 +46,17 @@ def experiment(seed: int, attack_model_class):
         attack_train_labels=proxy_train_labels,
         test_features=test_features, test_labels=test_labels # DELETEME
     )
+    best_model = torch.load("MyModel")
+    best_model.eval()
 
+
+    attack_model.weights_displacer.layer0_conv = best_model.layer0_conv
+    attack_model.weights_displacer.layer2_conv = best_model.layer2_conv
+    # attack_model.weights_displacer.layer0_conv.weight = torch.nn.Parameter(layer0_weight)
+    # attack_model.weights_displacer.layer0_conv.bias = torch.nn.Parameter(layer0_bias)
+    # attack_model.weights_displacer.layer2_conv.weight = torch.nn.Parameter(layer2_weight)
+    # attack_model.weights_displacer.layer2_conv.bias = torch.nn.Parameter(layer2_bias)
+    attack_model
     correct_intrainset_predictions = (
         attack_model(
             x=target_train_features[:test_features.shape[0]],
