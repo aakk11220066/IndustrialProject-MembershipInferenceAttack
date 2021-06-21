@@ -83,6 +83,7 @@ def trained_proxy_MLP_model(features: Tensor, class_labels: Tensor, target_model
 def trained_shadow_MLP_model(features: Tensor, class_labels: Tensor, target_model: nn.Module, test_features, test_labels):
     model = MLP()
     trainer = get_regular_model_trainer(model, loss=EntropyAndSyncLoss(model, target_model, type="SHADOW"))
+    class_labels = target_model(features).argmax(dim=1)
     trainer.fit(features, class_labels, num_epochs=NUM_EPOCHS)
     if SHOW_SHADOW_PROXY_LOSS_GRAPHS:
         display_losses(model_type="Shadow")
@@ -285,6 +286,7 @@ class ConvModelTrainer:
                 #     torch.nn.Parameter(self.model.layer0_conv.weight), self.model.layer2_conv.weight, self.model.layer0_conv.bias, self.model.layer2_conv.bias
                 # conv0 = self.model.layer0_conv
                 # conv2 = self.model.layer2_conv
+                torch.save(self.model,"MyModel")
                 print(f"Good Loss = {best_loss} -> model saved!")
             if num_epochs_without_improvement > NUM_PATIENCE_EPOCHS and i>8:
                 print(f"\nStopping early due to no improvement for {NUM_PATIENCE_EPOCHS} epochs")

@@ -71,11 +71,11 @@ class SynchronizationLoss(nn.Module):
         # TODO: optimize by extracting these pre-activations from original model forward-prop instead of recomputing them
         # y_pred and y_true go unused, only there in order to fit the abstract structure
         attack_model_results, target_model_results = [], []
-        attack_model_results.append(self.attack_model.layers[0](features))
-        attack_model_results.append(self.attack_model.layers[2](self.attack_model.layers[1](attack_model_results[0])))
+        attack_model_results.append(self.attack_model.layers[1](self.attack_model.layers[0](features)))
+        attack_model_results.append(self.attack_model.layers[3](self.attack_model.layers[2](attack_model_results[0])))
         with torch.no_grad(): # To prevent training from propagating back to the target model, which must be left untouched
-            target_model_results.append(self.target_model.layers[0](features))
-            target_model_results.append(self.target_model.layers[2](self.target_model.layers[1](target_model_results[0])))
+            target_model_results.append(self.target_model.layers[1](self.target_model.layers[0](features)))
+            target_model_results.append(self.target_model.layers[3](self.target_model.layers[2](target_model_results[0])))
         if type == "SHADOW":
             layer0_weight = LAYER0_SYNC_LOSS_WEIGHT_SHADOW
             layer2_weight = LAYER2_SYNC_LOSS_WEIGHT_SHADOW
@@ -105,6 +105,6 @@ class EntropyAndSyncLoss(nn.Module):
         loss = self.loss(y_pred, y_true)
         global crossentropy_losses
         crossentropy_losses.append(loss.item())
-        if self.type=="SHADOW":
-            loss*=0.5
+        # if self.type=="SHADOW":
+        #     loss = 0
         return loss + self.sync_loss(y_pred=y_pred, y_true=y_true, features=features)
