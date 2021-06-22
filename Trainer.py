@@ -251,9 +251,25 @@ class ConvModelTrainer:
             loss = self.loss_fn(membership_predictions, membership_labels)
             losses.append(loss.item())
             accuracies.append(temp_acc(membership_predictions, membership_labels))
+
+            # DEBUG
+            #self.model.layer0_conv.weight = nn.Parameter(torch.Tensor([[[[torch.normal(torch.Tensor([0.3]), torch.Tensor([0.3]))]], [[torch.normal(torch.Tensor([0.3]), torch.Tensor([0.2]))]]]]))
+            #self.model.layer0_conv.bias = nn.Parameter(torch.Tensor([torch.normal(torch.Tensor([0.2]), torch.Tensor([0.1]))]))
+            #self.model.layer2_conv.weight = nn.Parameter(torch.Tensor([[[[torch.normal(torch.Tensor([-0.4]), torch.Tensor([0.25]))]], [[torch.normal(torch.Tensor([0.0]), torch.Tensor([0.2]))]]]]))
+            #self.model.layer2_conv.bias = nn.Parameter(torch.Tensor([torch.normal(torch.Tensor([0]), torch.Tensor([0.1]))]))
+            # DEBUG
+
+            #'''
             loss.backward()
             self.scheduler.optimizer.step()
             self.scheduler.step()
+            #''' # DEBUG
+
+
+            if loss < self.best_loss:
+                self.best_loss = loss
+                torch.save(self.model, "MyModel")
+                print(f"Good Loss in epoch = {self.best_loss} -> model saved!")
 
         return losses, accuracies
 
@@ -268,7 +284,7 @@ class ConvModelTrainer:
         print("Training conv model on proxy-shadow model pairs")
         losses = []
         accuracies = []
-        best_loss = float('inf')
+        self.best_loss = float('inf')
         num_epochs_without_improvement = 0
         for i in tqdm(range(num_epochs)):
             losses_addendum, accuracies_addendum = self.train_epoch(training_dl)
@@ -276,18 +292,18 @@ class ConvModelTrainer:
             accuracies += accuracies_addendum
             loss = losses[-1]
 
-            if loss >= best_loss:
+            if loss > self.best_loss:
                 num_epochs_without_improvement += 1
             else:
                 num_epochs_without_improvement = 0
-                best_loss = loss
+                self.best_loss = loss
                 best_acc = accuracies[-1]
                 # layer0_weight, layer2_weight, layer0_bias, layer2_bias =\
                 #     torch.nn.Parameter(self.model.layer0_conv.weight), self.model.layer2_conv.weight, self.model.layer0_conv.bias, self.model.layer2_conv.bias
                 # conv0 = self.model.layer0_conv
                 # conv2 = self.model.layer2_conv
                 torch.save(self.model,"MyModel")
-                print(f"Good Loss = {best_loss} -> model saved!")
+                print(f"Good Loss = {self.best_loss} -> model saved!")
             if num_epochs_without_improvement > NUM_PATIENCE_EPOCHS and i>8:
                 print(f"\nStopping early due to no improvement for {NUM_PATIENCE_EPOCHS} epochs")
                 break
@@ -298,7 +314,7 @@ class ConvModelTrainer:
         plt.ylabel("Attack loss")
         plt.show()
         plt.plot(list(range(len(accuracies))), accuracies[:len(accuracies)], color="r")
-        print(f"train acc = {best_acc}")
+        print(f"train acc = {max(accuracies)}")
         plt.xlabel("Minibatch no.")
         plt.ylabel("Attack accuracy")
         plt.show()
