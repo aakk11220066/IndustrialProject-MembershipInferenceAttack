@@ -65,7 +65,7 @@ def experiment(seed: int, attack_model_class):
         target_model=target_model,
         attack_train_features=proxy_train_features,
         attack_train_labels=proxy_train_labels,
-        test_features=test_features, test_labels=test_labels # DELETEME
+        test_features=test_features, test_labels=test_labels
     )
     best_model = torch.load("MyModel") # load the best model we saved during the attack model training
     best_model.eval()
@@ -74,7 +74,6 @@ def experiment(seed: int, attack_model_class):
     attack_model.weights_displacer.layer0_conv = best_model.layer0_conv
     attack_model.weights_displacer.layer2_conv = best_model.layer2_conv
 
-    attack_model
     correct_intrainset_predictions = (
         attack_model(
             x=target_train_features[:test_features.shape[0]],

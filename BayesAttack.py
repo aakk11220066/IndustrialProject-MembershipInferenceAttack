@@ -6,7 +6,8 @@ from Trainer import get_regular_model_trainer
 
 class BayesAttackModel(LinearModel):
     """
-    Mathematical attack on linear target model under assumption of Gaussian distribution
+    Mathematical attack on linear target model under assumption of Gaussian distribution.  Optimality of this
+    implementation of get_attack_params function proven in the paper
     """
 
     def __init__(self,
@@ -25,6 +26,10 @@ class BayesAttackModel(LinearModel):
         self.layers[0].bias = nn.Parameter(attack_bias)
 
     def get_attack_params(self, target_model, proxy_model):
+        """
+        Get the optimal weights for the discriminator MLP.   Mathematically proven in paper to be optimal under Gaussian
+        distribution assumption.
+        """
         attack_weights = target_model.layers[0].weight - proxy_model.layers[0].weight
         attack_bias = target_model.layers[0].bias - proxy_model.layers[0].bias
         return attack_weights, attack_bias
@@ -36,5 +41,3 @@ class BayesAttackModel(LinearModel):
         :return: (boolean) datapoint in training set?
         """
         return super().forward(x).gather(dim=1, index=y.unsqueeze(dim=1)) > 0.5
-
-#DELETE THIS COMMENT
