@@ -9,8 +9,9 @@ def _shuffle_rows(x):
 
 def german_dataset(filename = "German.csv"):
     """
-    returns random dataset of training shape (batch_size, #x) and label shape (batch_size,)
+    Returns random dataset of training shape (batch_size, #x) and label shape (batch_size,)
     split into (attack_train_features, attack_train_labels), (test_features, test_labels)
+    Loaded from internet
     """
     dataset = torch.Tensor(pd.read_csv(filename).values)
     dataset = _shuffle_rows(dataset) # NOTE: unnecessary because not using mini-batches, but no harm done
@@ -24,5 +25,3 @@ def german_dataset(filename = "German.csv"):
     test_data_size = dataset.shape[0] - train_data_size
     return dataset_features[:train_data_size], dataset_labels[:train_data_size], \
            dataset_features[-test_data_size:], dataset_labels[-test_data_size:]
-
-#DELETE THIS COMMENT

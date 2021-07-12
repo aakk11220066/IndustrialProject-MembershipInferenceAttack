@@ -7,7 +7,7 @@ from Loss import init_test_data
 
 class MLPDiscriminatorModel(MLP):
     """
-    Mathematical attack on linear target model under assumption of Gaussian distribution
+    MLP model that computes membership confidences of given datapoints
     """
 
     def __init__(self,
@@ -40,8 +40,10 @@ class MLPDiscriminatorModel(MLP):
 
 
     def get_attack_params(self, target_model, proxy_model):
+        """
+        Get the optimal weights for the discriminator MLP.  To be implemented by child classes.
+        """
         raise NotImplementedError()
-
 
     def forward(self, x, y):
         """
@@ -50,5 +52,3 @@ class MLPDiscriminatorModel(MLP):
         :return: (boolean) datapoint in training set?
         """
         return super().forward(x).gather(dim=1, index=y.unsqueeze(dim=1)) > 0.5
-
-#DELETE THIS COMMENT
